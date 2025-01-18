@@ -31,3 +31,4 @@ C:\src\WebhookApi\obj\Debug\net9.0\refint\WebhookApi.dll
 C:\src\WebhookApi\obj\Debug\net9.0\WebhookApi.pdb
 C:\src\WebhookApi\obj\Debug\net9.0\WebhookApi.genruntimeconfig.cache
 C:\src\WebhookApi\obj\Debug\net9.0\ref\WebhookApi.dll
+C:\src\WebhookApi\obj\Debug\net9.0\WebhookApi.sourcelink.json
