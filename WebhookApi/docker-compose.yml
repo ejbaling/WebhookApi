@@ -4,14 +4,16 @@ services:
   webhookapi:
     build:
       context: .
-      dockerfile: WebhookApi/Dockerfile
+      dockerfile: Dockerfile
     ports:
       - "80:80"
       - "443:443"
+    environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:80;https://+:443
     networks:
       - webhook-network
+
 networks:
   webhook-network:
     driver: bridge
