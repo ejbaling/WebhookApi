@@ -17,5 +17,3 @@ services:
 networks:
   webhook-network:
     driver: bridge
-
-volumes:
