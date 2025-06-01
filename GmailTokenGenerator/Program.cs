@@ -19,6 +19,7 @@ namespace GmailTokenGenerator
             // dotnet user-secrets init
             // dotnet user-secrets set "GoogleAuth:ClientId" "your-gmail-client-id"
             // dotnet user-secrets set "GoogleAuth:ClientSecret" "your-gmail-client-secret"
+            // dotnet user-secrets set "GoogleAuth:TopicName" "your-gmail-topic-name"
 
             var configuration = new ConfigurationBuilder()
             .AddUserSecrets<Program>()
@@ -98,9 +99,11 @@ namespace GmailTokenGenerator
                 });
 
                 // Create watch request
+                string topicName = configuration["GoogleAuth:TopicName"]
+                ?? throw new Exception("Topic name not found in user secrets");
                 var watchRequest = new WatchRequest
                 {
-                    TopicName = "projects/redwood-website-374409/topics/gmail-push-topic", // Replace with your Pub/Sub topic
+                    TopicName = topicName,
                     LabelIds = new[] { "INBOX" },
                     LabelFilterAction = "include"
                 };
