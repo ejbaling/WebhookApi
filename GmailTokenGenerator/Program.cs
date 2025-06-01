@@ -7,6 +7,11 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 
+using Google.Apis.Gmail.v1;
+using Google.Apis.Gmail.v1.Data;
+using Google.Apis.Auth.OAuth2;
+using Google.Apis.Services;
+
 namespace GmailTokenGenerator
 {
     public class Program
@@ -25,10 +30,10 @@ namespace GmailTokenGenerator
             .AddUserSecrets<Program>()
             .Build();
 
-            string clientId = configuration["GoogleAuth:ClientId"] 
+            string clientId = configuration["GoogleAuth:ClientId"]
                 ?? throw new Exception("Client ID not found in user secrets");
 
-            string clientSecret = configuration["GoogleAuth:ClientSecret"] 
+            string clientSecret = configuration["GoogleAuth:ClientSecret"]
                 ?? throw new Exception("Client secret not found in user secrets");
 
             string authUrl = $"https://accounts.google.com/o/oauth2/v2/auth" +
@@ -40,7 +45,7 @@ namespace GmailTokenGenerator
             // Start listener first
             using var listener = new HttpListener();
             listener.Prefixes.Add(RedirectUri);
-            
+
             try
             {
                 listener.Start();
@@ -85,9 +90,50 @@ namespace GmailTokenGenerator
                 var accessToken = tokenData["access_token"].GetString();
                 var refreshToken = tokenData.TryGetValue("refresh_token", out var rt) ? rt.GetString() : "(none)";
 
-
                 Console.WriteLine($"Access Token: {accessToken}");
                 Console.WriteLine($"Refresh Token: {refreshToken}");
+
+                // Create credential from access token
+                var credential = GoogleCredential.FromAccessToken(accessToken);
+
+                // Initialize Gmail service with the credential
+                var gmailService = new GmailService(new BaseClientService.Initializer
+                {
+                    HttpClientInitializer = credential,
+                    ApplicationName = "Gmail Watch App"
+                });
+
+                // Create watch request
+                var watchRequest = new WatchRequest
+                {
+                    TopicName = "projects/redwood-website-374409/topics/gmail-push-topic", // Replace with your Pub/Sub topic
+                    LabelIds = new[] { "INBOX" },
+                    LabelFilterAction = "include"
+                };
+
+                try
+                {
+                    // Start watching the mailbox
+                    var watchResponse = await gmailService.Users.Watch(watchRequest, "me").ExecuteAsync();
+                    
+                    Console.WriteLine("Gmail watch setup successful!");
+                    Console.WriteLine($"History ID: {watchResponse.HistoryId}");
+                    Console.WriteLine($"Expiration: {watchResponse.Expiration}");
+                    
+                    // Save these values for future reference
+                    File.WriteAllText("watch-info.json", JsonSerializer.Serialize(new
+                    {
+                        historyId = watchResponse.HistoryId,
+                        expiration = watchResponse.Expiration,
+                        accessToken = accessToken,
+                        refreshToken = refreshToken
+                    }, new JsonSerializerOptions { WriteIndented = true }));
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to setup Gmail watch: {ex.Message}");
+                    Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                }
             }
             catch (HttpListenerException ex)
             {
