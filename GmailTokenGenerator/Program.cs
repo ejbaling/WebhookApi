@@ -1,12 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Net;
-using System.Net.Http;
-using System.Net.Http.Headers;
+﻿using System.Net;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
-
 using Google.Apis.Gmail.v1;
 using Google.Apis.Gmail.v1.Data;
 using Google.Apis.Auth.OAuth2;
@@ -119,15 +113,6 @@ namespace GmailTokenGenerator
                     Console.WriteLine("Gmail watch setup successful!");
                     Console.WriteLine($"History ID: {watchResponse.HistoryId}");
                     Console.WriteLine($"Expiration: {watchResponse.Expiration}");
-                    
-                    // Save these values for future reference
-                    File.WriteAllText("watch-info.json", JsonSerializer.Serialize(new
-                    {
-                        historyId = watchResponse.HistoryId,
-                        expiration = watchResponse.Expiration,
-                        accessToken = accessToken,
-                        refreshToken = refreshToken
-                    }, new JsonSerializerOptions { WriteIndented = true }));
                 }
                 catch (Exception ex)
                 {
