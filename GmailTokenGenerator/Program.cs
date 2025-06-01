@@ -107,6 +107,18 @@ namespace GmailTokenGenerator
 
                 try
                 {
+                    try
+                    {
+                        // Stop watching the mailbox
+                        await gmailService.Users.Stop("me").ExecuteAsync();
+                        Console.WriteLine("\nStopped watching mailbox successfully.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"\nFailed to stop watching mailbox: {ex.Message}");
+                        Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                    }
+
                     // Start watching the mailbox
                     var watchResponse = await gmailService.Users.Watch(watchRequest, "me").ExecuteAsync();
                     
