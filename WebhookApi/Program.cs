@@ -1,4 +1,19 @@
+using System.Text;
+using RabbitMQ.Client;
+using WebhookApi.Services;
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddSingleton<IConnectionFactory>(sp =>
+{
+    var hostName = builder.Configuration.GetValue<string>("RabbitMQ:HostName") 
+        ?? throw new InvalidOperationException("RabbitMQ:HostName configuration is required");
+    
+    return new ConnectionFactory { HostName = hostName };
+});
+
+// Add RabbitMQ consumer service
+builder.Services.AddHostedService<GmailNotificationConsumer>();
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -33,13 +48,29 @@ app.MapGet("/weatherforecast", () =>
 })
 .WithName("GetWeatherForecast");
 
-app.MapPost("gmail/notifications", async (HttpContext context) =>
+app.MapPost("gmail/notifications", async (HttpContext context, IConnectionFactory connectionFactory) =>
 {
     using var reader = new StreamReader(context.Request.Body);
     var requestBody = await reader.ReadToEndAsync();
     
     // Log or process the webhook payload
     Console.WriteLine($"Received webhook: {requestBody}");
+
+    // Push message to RabbitMQ
+    using var connection = await connectionFactory.CreateConnectionAsync();
+    using var channel = await  connection.CreateChannelAsync();
+    
+    await channel.QueueDeclareAsync(queue: "gmail-notifications",
+                        durable: true,
+                        exclusive: false,
+                        autoDelete: false,
+                        arguments: null);
+
+    var body = Encoding.UTF8.GetBytes(requestBody);
+    
+    await channel.BasicPublishAsync(exchange: "",
+                        routingKey: "gmail-notifications",
+                        body: body);
     
     return Results.Ok("Webhook received");
 })
