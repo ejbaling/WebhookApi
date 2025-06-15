@@ -5,6 +5,7 @@ using Google.Apis.Gmail.v1;
 using Google.Apis.Gmail.v1.Data;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Services;
+using System.IdentityModel.Tokens.Jwt;
 
 namespace GmailTokenGenerator
 {
@@ -88,6 +89,11 @@ namespace GmailTokenGenerator
                 Console.WriteLine($"Access Token: {accessToken}");
                 Console.WriteLine($"Refresh Token: {refreshToken}");
 
+                var expiresIn = tokenData["expires_in"].GetInt32();
+                var expiresAt = DateTime.UtcNow.AddSeconds(expiresIn);
+                Console.WriteLine($"Token expires at: {expiresAt.ToLocalTime()}");
+                Console.WriteLine($"Token valid for: {expiresIn / 60.0:F1} minutes");
+
                 // Create credential from access token
                 var credential = GoogleCredential.FromAccessToken(accessToken);
 
@@ -124,10 +130,20 @@ namespace GmailTokenGenerator
 
                     // Start watching the mailbox
                     var watchResponse = await gmailService.Users.Watch(watchRequest, "me").ExecuteAsync();
-                    
+
                     Console.WriteLine("Gmail watch setup successful!");
                     Console.WriteLine($"History ID: {watchResponse.HistoryId}");
-                    Console.WriteLine($"Expiration: {watchResponse.Expiration}");
+                    // Convert Unix timestamp to human-readable date
+                    if (watchResponse.Expiration.HasValue)
+                    {
+                        var expirationDate = DateTimeOffset.FromUnixTimeMilliseconds((long)watchResponse.Expiration.Value)
+                            .LocalDateTime;
+                        Console.WriteLine($"Expiration: {expirationDate:f}"); // "f" format gives "Tuesday, April 10, 2024 9:15 PM"
+                    }
+                    else
+                    {
+                        Console.WriteLine("No expiration time provided by Gmail API");
+                    }
                 }
                 catch (Exception ex)
                 {
