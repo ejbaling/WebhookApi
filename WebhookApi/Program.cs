@@ -52,14 +52,14 @@ app.MapPost("gmail/notifications", async (HttpContext context, IConnectionFactor
 {
     using var reader = new StreamReader(context.Request.Body);
     var requestBody = await reader.ReadToEndAsync();
-    
+
     // Log or process the webhook payload
     Console.WriteLine($"Received webhook: {requestBody}");
 
     // Push message to RabbitMQ
     using var connection = await connectionFactory.CreateConnectionAsync();
-    using var channel = await  connection.CreateChannelAsync();
-    
+    using var channel = await connection.CreateChannelAsync();
+
     await channel.QueueDeclareAsync(queue: "gmail-notifications",
                         durable: true,
                         exclusive: false,
@@ -67,14 +67,25 @@ app.MapPost("gmail/notifications", async (HttpContext context, IConnectionFactor
                         arguments: null);
 
     var body = Encoding.UTF8.GetBytes(requestBody);
-    
+
     await channel.BasicPublishAsync(exchange: "",
                         routingKey: "gmail-notifications",
                         body: body);
-    
+
     return Results.Ok("Webhook received");
 })
-.WithName("ProcessWebhook");
+.WithName("ProcessGmailWebhook");
+
+
+app.MapPost("sms/notifications", async (HttpContext context, IConnectionFactory connectionFactory, ILogger<Program> logger) =>
+{
+    using var reader = new StreamReader(context.Request.Body);
+    var requestBody = await reader.ReadToEndAsync();
+    logger.LogInformation("Received SMS webhook: {Payload}", requestBody);
+
+    return Results.Ok("Webhook received");
+})
+.WithName("ProcessSmsWebhook");
 
 app.Run();
 
