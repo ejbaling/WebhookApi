@@ -101,6 +101,8 @@ app.MapPost("sms/notifications", async (HttpContext context, IConnectionFactory 
         return Results.Problem("Telegram ChatId is not configured.", statusCode: 500);
     }
 
+    logger.LogInformation(chatId);
+
     var botClient = new TelegramBotClient(botToken);
 
     string messageToSend;
