@@ -107,13 +107,14 @@ app.MapPost("sms/notifications", async (HttpContext context, IConnectionFactory 
     try
     {
         var json = JsonDocument.Parse(requestBody);
-        if (json.RootElement.TryGetProperty("message", out var messageElement))
+        if (json.RootElement.TryGetProperty("payload", out var payloadElement) &&
+            payloadElement.TryGetProperty("message", out var messageElement))
         {
             messageToSend = messageElement.GetString() ?? "";
         }
         else
         {
-            messageToSend = "No 'message' property found in requestBody.";
+            messageToSend = "No 'payload.message' property found in requestBody.";
         }
     }
     catch (JsonException)
