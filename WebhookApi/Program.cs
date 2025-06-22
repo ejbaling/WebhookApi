@@ -1,5 +1,7 @@
 using System.Text;
+using System.Text.Json;
 using RabbitMQ.Client;
+using Telegram.Bot;
 using WebhookApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -77,13 +79,54 @@ app.MapPost("gmail/notifications", async (HttpContext context, IConnectionFactor
 .WithName("ProcessGmailWebhook");
 
 
-app.MapPost("sms/notifications", async (HttpContext context, IConnectionFactory connectionFactory, ILogger<Program> logger) =>
+app.MapPost("sms/notifications", async (HttpContext context, IConnectionFactory connectionFactory, ILogger<Program> logger, IConfiguration config) =>
 {
     using var reader = new StreamReader(context.Request.Body);
     var requestBody = await reader.ReadToEndAsync();
     logger.LogInformation("Received SMS webhook: {Payload}", requestBody);
 
-    return Results.Ok("Webhook received");
+    // Send message to Telegram
+    var botToken = config["Telegram:BotToken"];
+    var chatId = config["Telegram:ChatId"]; // Your personal Telegram user ID
+
+    if (string.IsNullOrEmpty(botToken))
+    {
+        logger.LogError("Telegram BotToken is not configured.");
+        return Results.Problem("Telegram BotToken is not configured.", statusCode: 500);
+    }
+
+    if (string.IsNullOrEmpty(chatId))
+    {
+        logger.LogError("Telegram ChatId is not configured.");
+        return Results.Problem("Telegram ChatId is not configured.", statusCode: 500);
+    }
+
+    var botClient = new TelegramBotClient(botToken);
+
+    string messageToSend;
+    try
+    {
+        var json = JsonDocument.Parse(requestBody);
+        if (json.RootElement.TryGetProperty("message", out var messageElement))
+        {
+            messageToSend = messageElement.GetString() ?? "";
+        }
+        else
+        {
+            messageToSend = "No 'message' property found in requestBody.";
+        }
+    }
+    catch (JsonException)
+    {
+        messageToSend = "Invalid JSON in requestBody.";
+    }
+
+    await botClient.SendTextMessageAsync(
+        new Telegram.Bot.Types.ChatId(chatId),
+        text: messageToSend,
+        cancellationToken: CancellationToken.None);
+
+    return Results.Ok("Webhook received and forwarded to Telegram");
 })
 .WithName("ProcessSmsWebhook");
 
