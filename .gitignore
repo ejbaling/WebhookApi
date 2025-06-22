@@ -44,3 +44,4 @@ msbuild.wrn
 
 # sonarqube
 .sonarqube
+WebhookApi/appsettings.Development.json
