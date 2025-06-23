@@ -16,6 +16,7 @@ builder.Services.AddSingleton<IConnectionFactory>(sp =>
 
 // Add RabbitMQ consumer service
 builder.Services.AddHostedService<GmailNotificationConsumer>();
+builder.Services.AddHostedService<WebhookApi.Services.TelegramReceiverService>();
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -104,6 +105,7 @@ app.MapPost("sms/notifications", async (HttpContext context, IConnectionFactory 
     var botClient = new TelegramBotClient(botToken);
 
     string messageToSend;
+    string phoneNumber = "";
     try
     {
         var json = JsonDocument.Parse(requestBody);
@@ -116,6 +118,12 @@ app.MapPost("sms/notifications", async (HttpContext context, IConnectionFactory 
         {
             messageToSend = "No 'payload.message' property found in requestBody.";
         }
+
+        // Get phoneNumber
+        if (payloadElement.TryGetProperty("phoneNumber", out var phoneElement))
+        {
+            phoneNumber = phoneElement.GetString() ?? "";
+        }
     }
     catch (JsonException)
     {
@@ -124,7 +132,7 @@ app.MapPost("sms/notifications", async (HttpContext context, IConnectionFactory 
 
     await botClient.SendTextMessageAsync(
         new Telegram.Bot.Types.ChatId(chatId),
-        text: messageToSend,
+        text: $"{phoneNumber} {messageToSend}".Trim(),
         cancellationToken: CancellationToken.None);
 
     return Results.Ok("Webhook received and forwarded to Telegram");
