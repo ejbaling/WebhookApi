@@ -65,7 +65,7 @@ namespace WebhookApi.Services
                     var smsMessage = parts[1];
 
                     // Simple regex: starts with optional +, then digits, at least 10 digits
-                    var phoneRegex = new Regex(@"^\+?\d{10,}$");
+                    var phoneRegex = new Regex(@"^\+?\d{3,}$");
                     if (phoneRegex.IsMatch(phoneNumber))
                     {
                         // Prepare the payload
