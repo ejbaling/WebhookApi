@@ -11,7 +11,16 @@ using System.Text.Json.Serialization;
 
 namespace WebhookApi.Services;
 
-public class GmailPushData
+public class GmailMessageData
+{
+    [JsonPropertyName("emailAddress")]
+    public string? EmailAddress { get; set; }
+
+    [JsonPropertyName("historyId")]
+    public ulong HistoryId { get; set; }
+}
+
+public class GmailMessage
 {
     [JsonPropertyName("messageId")]
     public string? MessageId { get; set; }
@@ -21,18 +30,6 @@ public class GmailPushData
 
     [JsonPropertyName("data")]
     public string? Data { get; set; }
-
-    [JsonPropertyName("emailAddress")]
-    public string? EmailAddress { get; set; }
-
-    [JsonPropertyName("historyId")]
-    public ulong HistoryId { get; set; }
-}
-
-public class GmailNotification
-{
-    [JsonPropertyName("message")]
-    public GmailPushData? Message { get; set; }
 }
 
 public class GmailNotificationConsumer : BackgroundService
@@ -120,13 +117,13 @@ public class GmailNotificationConsumer : BackgroundService
 
                     try
                     {
-                        // _logger.LogInformation("Processing message: {Message}", message);
+                        _logger.LogInformation("Processing message: {Message}", message);
                         
-                        var notification = JsonSerializer.Deserialize<GmailNotification>(message);
-                        if (notification != null)
+                        var gmailMessage = JsonSerializer.Deserialize<GmailMessage>(message);
+                        if (gmailMessage != null)
                         {
                             // Process the notification
-                            await ProcessNotification(notification);
+                            await ProcessNotification(gmailMessage);
                         }
                         
                         await _channel.BasicAckAsync(ea.DeliveryTag, false);
@@ -173,10 +170,10 @@ public class GmailNotificationConsumer : BackgroundService
         }
     }
 
-    private async Task ProcessNotification(GmailNotification notification)
+    private async Task ProcessNotification(GmailMessage gmailMessage)
     {
-        // _logger.LogInformation("Processing Gmail notification from {Timestamp}: {MessageId}",
-        //     notification.Message?.Timestamp, notification.Message?.MessageId);
+        _logger.LogInformation("Processing Gmail notification from {Timestamp}: {MessageId}",
+            gmailMessage.Timestamp, gmailMessage.MessageId);
 
         // Load Gmail API credentials from configuration
         var refreshToken = _configuration["Google:RefreshToken"];
@@ -204,11 +201,11 @@ public class GmailNotificationConsumer : BackgroundService
             ApplicationName = "WebhookApi"
         });
 
-        if (!string.IsNullOrEmpty(notification.Message?.Data))
+        if (!string.IsNullOrWhiteSpace(gmailMessage.Data))
         {
-            var json = Encoding.UTF8.GetString(Convert.FromBase64String(notification.Message.Data));
+            var json = Encoding.UTF8.GetString(Convert.FromBase64String(gmailMessage.Data));
             _logger.LogInformation("Received Gmail push notification data: {Data}", json);
-            var pushData = JsonSerializer.Deserialize<GmailPushData>(json);
+            var data = JsonSerializer.Deserialize<GmailMessageData>(json);
 
             // ulong startHistoryId = pushData?.HistoryId ?? 0;
             // if (_lastProcessedHistoryId > 0 && _lastProcessedHistoryId < startHistoryId)
@@ -216,49 +213,55 @@ public class GmailNotificationConsumer : BackgroundService
             //     startHistoryId = _lastProcessedHistoryId;
             // }
 
-            if (pushData?.HistoryId > 0)
+            if (data != null && data.HistoryId > 0)
             {
+                if (_lastProcessedHistoryId == 0)
+                    _lastProcessedHistoryId = data.HistoryId;
+
                 // Simplified: single attempt to fetch new messages
                 var historyRequest = gmailService.Users.History.List("me");
-                historyRequest.StartHistoryId = _lastProcessedHistoryId > 0 ? _lastProcessedHistoryId : pushData.HistoryId;
+                historyRequest.StartHistoryId = _lastProcessedHistoryId;
                 historyRequest.HistoryTypes = UsersResource.HistoryResource.ListRequest.HistoryTypesEnum.MessageAdded;
                 var historyResponse = await historyRequest.ExecuteAsync();
 
-                if (historyResponse.History != null)
+                if (historyResponse.History != null && historyResponse.HistoryId.HasValue)
                 {
-                    foreach (var history in historyResponse.History)
-                    {
-                        if (history.MessagesAdded != null)
+                    _logger.LogInformation("Processing Gmail history from ID: {HistoryId}", historyResponse.HistoryId);
+
+                    // Process each history record
+                        foreach (var record in historyResponse.History)
                         {
-                            foreach (var msgAdded in history.MessagesAdded)
+                            if (record.MessagesAdded != null)
                             {
-                                var messageId = msgAdded.Message.Id;
-                                var message = await gmailService.Users.Messages.Get("me", messageId).ExecuteAsync();
-                                _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
-                                // You can process the message here
-                                //var messageJson = JsonSerializer.Serialize(message, new JsonSerializerOptions { WriteIndented = true });
-                                //_logger.LogInformation("Full Gmail message: {MessageJson}", messageJson);
+                                foreach (var msgAdded in record.MessagesAdded)
+                                {
+                                    var messageId = msgAdded.Message.Id;
+                                    var message = await gmailService.Users.Messages.Get("me", messageId).ExecuteAsync();
+                                    _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
+                                    // You can process the message here
+                                    //var messageJson = JsonSerializer.Serialize(message, new JsonSerializerOptions { WriteIndented = true });
+                                    //_logger.LogInformation("Full Gmail message: {MessageJson}", messageJson);
+                                }
                             }
                         }
+                        // Update in-memory last processed historyId
+                        _lastProcessedHistoryId = (ulong)historyResponse.HistoryId;
+                else
+                    {
+                        _logger.LogWarning("No new messages found in Gmail history.");
                     }
-                    // Update in-memory last processed historyId
-                    _lastProcessedHistoryId = Math.Max(_lastProcessedHistoryId, historyResponse.HistoryId ?? _lastProcessedHistoryId);
                 }
                 else
                 {
-                    _logger.LogWarning("No new messages found in Gmail history.");
+                    _logger.LogWarning("No valid historyId found in push notification.");
                 }
             }
             else
             {
-                _logger.LogWarning("No valid historyId found in push notification.");
+                _logger.LogWarning("Notification does not contain a data field.");
             }
         }
-        else
-        {
-            _logger.LogWarning("Notification does not contain a data field.");
-        }
-    }
+    }}
 
     private void CleanupConnection()
     {
