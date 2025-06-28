@@ -22,8 +22,10 @@ public class GmailPushData
     [JsonPropertyName("data")]
     public string? Data { get; set; }
 
+    [JsonPropertyName("emailAddress")]
     public string? EmailAddress { get; set; }
 
+    [JsonPropertyName("historyId")]
     public ulong HistoryId { get; set; }
 }
 
