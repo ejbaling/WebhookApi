@@ -229,39 +229,39 @@ public class GmailNotificationConsumer : BackgroundService
                     _logger.LogInformation("Processing Gmail history from ID: {HistoryId}", historyResponse.HistoryId);
 
                     // Process each history record
-                        foreach (var record in historyResponse.History)
+                    foreach (var record in historyResponse.History)
+                    {
+                        if (record.MessagesAdded != null)
                         {
-                            if (record.MessagesAdded != null)
+                            foreach (var msgAdded in record.MessagesAdded)
                             {
-                                foreach (var msgAdded in record.MessagesAdded)
-                                {
-                                    var messageId = msgAdded.Message.Id;
-                                    var message = await gmailService.Users.Messages.Get("me", messageId).ExecuteAsync();
-                                    _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
-                                    // You can process the message here
-                                    //var messageJson = JsonSerializer.Serialize(message, new JsonSerializerOptions { WriteIndented = true });
-                                    //_logger.LogInformation("Full Gmail message: {MessageJson}", messageJson);
-                                }
+                                var messageId = msgAdded.Message.Id;
+                                var message = await gmailService.Users.Messages.Get("me", messageId).ExecuteAsync();
+                                _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
+                                // You can process the message here
+                                //var messageJson = JsonSerializer.Serialize(message, new JsonSerializerOptions { WriteIndented = true });
+                                //_logger.LogInformation("Full Gmail message: {MessageJson}", messageJson);
                             }
                         }
-                        // Update in-memory last processed historyId
-                        _lastProcessedHistoryId = (ulong)historyResponse.HistoryId;
-                else
-                    {
-                        _logger.LogWarning("No new messages found in Gmail history.");
                     }
+                    // Update in-memory last processed historyId
+                    _lastProcessedHistoryId = (ulong)historyResponse.HistoryId;
                 }
                 else
                 {
-                    _logger.LogWarning("No valid historyId found in push notification.");
+                    _logger.LogWarning("No new messages found in Gmail history.");
                 }
             }
             else
             {
-                _logger.LogWarning("Notification does not contain a data field.");
+                _logger.LogWarning("No valid historyId found in push notification.");
             }
         }
-    }}
+        else
+        {
+            _logger.LogWarning("Notification does not contain a data field.");
+        }
+    }
 
     private void CleanupConnection()
     {
