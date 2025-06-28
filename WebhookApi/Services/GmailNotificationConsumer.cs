@@ -1,14 +1,29 @@
+using Google.Apis.Auth.OAuth2;
+using Google.Apis.Gmail.v1;
+using Google.Apis.Gmail.v1.Data;
+using Google.Apis.Services;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace WebhookApi.Services;
 
+public class GmailMessage
+{
+    [JsonPropertyName("messageId")]
+    public string? MessageId { get; set; }
+
+    [JsonPropertyName("publishTime")]
+    public DateTime Timestamp { get; set; }
+}
+
 public class GmailNotification
 {
-    public string? Message { get; set; }
-    public DateTime Timestamp { get; set; }
+    [JsonPropertyName("message")]
+    public GmailMessage? Message { get; set; }
 }
 
 public class GmailNotificationConsumer : BackgroundService
@@ -145,10 +160,49 @@ public class GmailNotificationConsumer : BackgroundService
 
     private async Task ProcessNotification(GmailNotification notification)
     {
-        _logger.LogInformation("Processing Gmail notification from {Timestamp}: {Message}",
-            notification.Timestamp, notification.Message);
-        // Add your specific notification processing logic here
-        await Task.CompletedTask;
+        _logger.LogInformation("Processing Gmail notification from {Timestamp}: {MessageId}",
+            notification.Message?.Timestamp, notification.Message?.MessageId);
+
+        // Load user credentials (OAuth2 flow or service account)
+        // For demo: using a service account with domain-wide delegation (for G Suite)
+        GoogleCredential credential;
+        using (var stream = new FileStream("path-to-your-credentials.json", FileMode.Open, FileAccess.Read))
+        {
+            credential = GoogleCredential.FromStream(stream)
+                .CreateScoped(GmailService.Scope.GmailReadonly);
+            // If using domain-wide delegation:
+            // credential = credential.CreateWithUser("user@yourdomain.com");
+        }
+
+        // Create the Gmail API service
+        var gmailService = new GmailService(new BaseClientService.Initializer()
+        {
+            HttpClientInitializer = credential,
+            ApplicationName = "WebhookApi"
+        });
+
+        // Use the Message property as the Gmail message ID
+    if (!string.IsNullOrEmpty(notification.Message?.MessageId))
+    {
+        try
+        {
+            var messageRequest = gmailService.Users.Messages.Get("me", notification.Message?.MessageId);
+            var message = await messageRequest.ExecuteAsync();
+
+            // var snippet = message.Snippet;
+            _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
+
+            // If you want the full body, you can extract it from message.Payload.Parts or message.Payload.Body
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch Gmail message with ID: {MessageId}", notification.Message);
+        }
+    }
+    else
+    {
+        _logger.LogWarning("Notification does not contain a Gmail message ID.");
+    }
     }
 
     private void CleanupConnection()
