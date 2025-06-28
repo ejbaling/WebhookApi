@@ -217,51 +217,35 @@ public class GmailNotificationConsumer : BackgroundService
 
             if (pushData?.HistoryId > 0)
             {
-                var maxRetries = 3;
-                var delayMs = 2000;
-                int attempt = 0;
-                bool foundMessages = false;
-                do
-                {
-                    var historyRequest = gmailService.Users.History.List("me");
-                    historyRequest.StartHistoryId = startHistoryId;
-                    historyRequest.HistoryTypes = UsersResource.HistoryResource.ListRequest.HistoryTypesEnum.MessageAdded;
-                    var historyResponse = await historyRequest.ExecuteAsync();
+                // Simplified: single attempt to fetch new messages
+                var historyRequest = gmailService.Users.History.List("me");
+                historyRequest.StartHistoryId = startHistoryId;
+                historyRequest.HistoryTypes = UsersResource.HistoryResource.ListRequest.HistoryTypesEnum.MessageAdded;
+                var historyResponse = await historyRequest.ExecuteAsync();
 
-                    if (historyResponse.History != null)
+                if (historyResponse.History != null)
+                {
+                    foreach (var history in historyResponse.History)
                     {
-                        foreach (var history in historyResponse.History)
+                        if (history.MessagesAdded != null)
                         {
-                            if (history.MessagesAdded != null)
+                            foreach (var msgAdded in history.MessagesAdded)
                             {
-                                foreach (var msgAdded in history.MessagesAdded)
-                                {
-                                    var messageId = msgAdded.Message.Id;
-                                    var message = await gmailService.Users.Messages.Get("me", messageId).ExecuteAsync();
-                                    _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
-                                    // You can process the message here
-                                    foundMessages = true;
-                                }
+                                var messageId = msgAdded.Message.Id;
+                                var message = await gmailService.Users.Messages.Get("me", messageId).ExecuteAsync();
+                                _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
+                                // You can process the message here
                             }
                         }
-                        // Update in-memory last processed historyId
-                        var maxHistoryId = historyResponse.HistoryId ?? 0;
-                        _lastProcessedHistoryId = Math.Max(_lastProcessedHistoryId, maxHistoryId);
                     }
-                    if (!foundMessages)
-                    {
-                        attempt++;
-                        if (attempt < maxRetries)
-                        {
-                            _logger.LogWarning("No new messages found in Gmail history. Retrying in {Delay}ms (Attempt {Attempt}/{Max})", delayMs, attempt, maxRetries);
-                            await Task.Delay(delayMs);
-                        }
-                        else
-                        {
-                            _logger.LogWarning("No new messages found in Gmail history after {Max} attempts.", maxRetries);
-                        }
-                    }
-                } while (!foundMessages && attempt < maxRetries);
+                    // Update in-memory last processed historyId
+                    var maxHistoryId = historyResponse.HistoryId ?? 0;
+                    _lastProcessedHistoryId = Math.Max(_lastProcessedHistoryId, historyResponse.HistoryId ?? _lastProcessedHistoryId);
+                }
+                else
+                {
+                    _logger.LogWarning("No new messages found in Gmail history.");
+                }
             }
             else
             {
