@@ -219,7 +219,7 @@ public class GmailNotificationConsumer : BackgroundService
             {
                 // Simplified: single attempt to fetch new messages
                 var historyRequest = gmailService.Users.History.List("me");
-                historyRequest.StartHistoryId = _lastProcessedHistoryId ;
+                historyRequest.StartHistoryId = _lastProcessedHistoryId > 0 ? _lastProcessedHistoryId : pushData.HistoryId;
                 historyRequest.HistoryTypes = UsersResource.HistoryResource.ListRequest.HistoryTypesEnum.MessageAdded;
                 var historyResponse = await historyRequest.ExecuteAsync();
 
