@@ -24,7 +24,7 @@ public class GmailPushData
 
     public string? EmailAddress { get; set; }
 
-    public decimal HistoryId { get; set; }
+    public ulong HistoryId { get; set; }
 }
 
 public class GmailNotification
@@ -199,28 +199,52 @@ public class GmailNotificationConsumer : BackgroundService
             ApplicationName = "WebhookApi"
         });
 
-        if (!string.IsNullOrEmpty(notification.Message?.MessageId))
+        if (!string.IsNullOrEmpty(notification.Message?.Data))
         {
-            var base64 = notification.Message?.Data;
-            var json = Encoding.UTF8.GetString(Convert.FromBase64String(base64));
+            // 1. Decode the base64 data
+            var json = Encoding.UTF8.GetString(Convert.FromBase64String(notification.Message.Data));
             var pushData = JsonSerializer.Deserialize<GmailPushData>(json);
 
-            _logger.LogInformation(pushData?.EmailAddress);
+            _logger.LogInformation("Received push notification: {Json}", json);
+            _logger.LogInformation("Push for email: {Email}, historyId: {HistoryId}", pushData?.EmailAddress, pushData?.HistoryId);
 
-            // try
-            // {
-            //     var messageRequest = gmailService.Users.Messages.Get("me", notification.Message.MessageId);
-            //     var message = await messageRequest.ExecuteAsync();
-            //     _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
-            // }
-            // catch (Exception ex)
-            // {
-            //     _logger.LogError(ex, "Failed to fetch Gmail message with ID: {MessageId}", notification.Message.MessageId);
-            // }
+            // 2. Use the historyId to get new message IDs
+            if (pushData?.HistoryId > 0)
+            {
+                var historyRequest = gmailService.Users.History.List("me");
+                historyRequest.StartHistoryId = pushData.HistoryId;
+                historyRequest.HistoryTypes = UsersResource.HistoryResource.ListRequest.HistoryTypesEnum.MessageAdded;
+                var historyResponse = await historyRequest.ExecuteAsync();
+
+                if (historyResponse.History != null)
+                {
+                    foreach (var history in historyResponse.History)
+                    {
+                        if (history.MessagesAdded != null)
+                        {
+                            foreach (var msgAdded in history.MessagesAdded)
+                            {
+                                var messageId = msgAdded.Message.Id;
+                                var message = await gmailService.Users.Messages.Get("me", messageId).ExecuteAsync();
+                                _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
+                                // You can process the message here
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("No new messages found in Gmail history.");
+                }
+            }
+            else
+            {
+                _logger.LogWarning("No valid historyId found in push notification.");
+            }
         }
         else
         {
-            _logger.LogWarning("Notification does not contain a Gmail message ID.");
+            _logger.LogWarning("Notification does not contain a data field.");
         }
     }
 
