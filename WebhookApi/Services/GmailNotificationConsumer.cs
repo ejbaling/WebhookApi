@@ -103,7 +103,7 @@ public class GmailNotificationConsumer : BackgroundService
             }
 
             retryCount = 0; // Reset retry count on successful connection
-            _logger.LogInformation("Gmail notification consumer started");
+            // _logger.LogInformation("Gmail notification consumer started");
 
             try
             {
@@ -117,7 +117,7 @@ public class GmailNotificationConsumer : BackgroundService
 
                     try
                     {
-                        _logger.LogInformation("Processing message: {Message}", message);
+                        // _logger.LogInformation("Processing message: {Message}", message);
                         
                         var notification = JsonSerializer.Deserialize<GmailNotification>(message);
                         if (notification != null)
@@ -172,8 +172,8 @@ public class GmailNotificationConsumer : BackgroundService
 
     private async Task ProcessNotification(GmailNotification notification)
     {
-        _logger.LogInformation("Processing Gmail notification from {Timestamp}: {MessageId}",
-            notification.Message?.Timestamp, notification.Message?.MessageId);
+        // _logger.LogInformation("Processing Gmail notification from {Timestamp}: {MessageId}",
+        //     notification.Message?.Timestamp, notification.Message?.MessageId);
 
         // Load Gmail API credentials from configuration
         var refreshToken = _configuration["Google:RefreshToken"];
@@ -206,9 +206,6 @@ public class GmailNotificationConsumer : BackgroundService
             // 1. Decode the base64 data
             var json = Encoding.UTF8.GetString(Convert.FromBase64String(notification.Message.Data));
             var pushData = JsonSerializer.Deserialize<GmailPushData>(json);
-
-            _logger.LogInformation("Received push notification: {Json}", json);
-            _logger.LogInformation("Push for email: {Email}, historyId: {HistoryId}", pushData?.EmailAddress, pushData?.HistoryId);
 
             // 2. Use the historyId to get new message IDs
             if (pushData?.HistoryId > 0)
