@@ -245,10 +245,8 @@ public class GmailNotificationConsumer : BackgroundService
                             }
                         }
                         // Update in-memory last processed historyId
-                        if (historyResponse.HistoryId != null)
-                        {
-                            _lastProcessedHistoryId = historyResponse.HistoryId.Value;
-                        }
+                        var maxHistoryId = historyResponse.HistoryId ?? 0;
+                        _lastProcessedHistoryId = Math.Max(_lastProcessedHistoryId, maxHistoryId);
                     }
                     if (!foundMessages)
                     {
