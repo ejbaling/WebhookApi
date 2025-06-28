@@ -245,11 +245,18 @@ public class GmailNotificationConsumer : BackgroundService
                             foreach (var msgAdded in record.MessagesAdded)
                             {
                                 var messageId = msgAdded.Message.Id;
-                                var message = await gmailService.Users.Messages.Get("me", messageId).ExecuteAsync();
-                                _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
-                                // You can process the message here
-                                //var messageJson = JsonSerializer.Serialize(message, new JsonSerializerOptions { WriteIndented = true });
-                                //_logger.LogInformation("Full Gmail message: {MessageJson}", messageJson);
+                                try
+                                {
+                                    var message = await gmailService.Users.Messages.Get("me", messageId).ExecuteAsync();
+                                    _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
+                                    // Optionally log the full message as JSON
+                                    // var messageJson = JsonSerializer.Serialize(message, new JsonSerializerOptions { WriteIndented = true });
+                                    // _logger.LogInformation("Full Gmail message: {MessageJson}", messageJson);
+                                }
+                                catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
+                                {
+                                    _logger.LogWarning("Gmail message with ID {MessageId} not found. Skipping. Error: {Error}", messageId, ex.Message);
+                                }
                             }
                         }
                     }
