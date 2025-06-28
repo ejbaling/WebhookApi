@@ -21,6 +21,10 @@ public class GmailPushData
 
     [JsonPropertyName("data")]
     public string? Data { get; set; }
+
+    public string? EmailAddress { get; set; }
+
+    public decimal HistoryId { get; set; }
 }
 
 public class GmailNotification
@@ -201,7 +205,7 @@ public class GmailNotificationConsumer : BackgroundService
             var json = Encoding.UTF8.GetString(Convert.FromBase64String(base64));
             var pushData = JsonSerializer.Deserialize<GmailPushData>(json);
 
-            _logger.LogInformation(json);
+            _logger.LogInformation(pushData?.EmailAddress);
 
             // try
             // {
