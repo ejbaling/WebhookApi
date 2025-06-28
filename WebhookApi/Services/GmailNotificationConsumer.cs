@@ -35,13 +35,16 @@ public class GmailNotificationConsumer : BackgroundService
     private const string QueueName = "gmail-notifications";
     private readonly int _maxRetryAttempts = 10;
     private readonly TimeSpan _reconnectDelay = TimeSpan.FromSeconds(5);
+    private readonly IConfiguration _configuration;
 
     public GmailNotificationConsumer(
         IConnectionFactory connectionFactory,
-        ILogger<GmailNotificationConsumer> logger)
+        ILogger<GmailNotificationConsumer> logger,
+        IConfiguration configuration)
     {
         _connectionFactory = connectionFactory;
         _logger = logger;
+        _configuration = configuration;
     }
 
     private async Task<bool> TryConnect()
@@ -166,7 +169,8 @@ public class GmailNotificationConsumer : BackgroundService
         // Load user credentials (OAuth2 flow or service account)
         // For demo: using a service account with domain-wide delegation (for G Suite)
         GoogleCredential credential;
-        using (var stream = new FileStream("path-to-your-credentials.json", FileMode.Open, FileAccess.Read))
+        var credentialsPath = _configuration["Google:CredentialsPath"];
+        using (var stream = new FileStream(credentialsPath ?? "", FileMode.Open, FileAccess.Read))
         {
             credential = GoogleCredential.FromStream(stream)
                 .CreateScoped(GmailService.Scope.GmailReadonly);
@@ -182,27 +186,27 @@ public class GmailNotificationConsumer : BackgroundService
         });
 
         // Use the Message property as the Gmail message ID
-    if (!string.IsNullOrEmpty(notification.Message?.MessageId))
-    {
-        try
+        if (!string.IsNullOrEmpty(notification.Message?.MessageId))
         {
-            var messageRequest = gmailService.Users.Messages.Get("me", notification.Message?.MessageId);
-            var message = await messageRequest.ExecuteAsync();
+            try
+            {
+                var messageRequest = gmailService.Users.Messages.Get("me", notification.Message?.MessageId);
+                var message = await messageRequest.ExecuteAsync();
 
-            // var snippet = message.Snippet;
-            _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
+                // var snippet = message.Snippet;
+                _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
 
-            // If you want the full body, you can extract it from message.Payload.Parts or message.Payload.Body
+                // If you want the full body, you can extract it from message.Payload.Parts or message.Payload.Body
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to fetch Gmail message with ID: {MessageId}", notification.Message);
+            }
         }
-        catch (Exception ex)
+        else
         {
-            _logger.LogError(ex, "Failed to fetch Gmail message with ID: {MessageId}", notification.Message);
+            _logger.LogWarning("Notification does not contain a Gmail message ID.");
         }
-    }
-    else
-    {
-        _logger.LogWarning("Notification does not contain a Gmail message ID.");
-    }
     }
 
     private void CleanupConnection()
