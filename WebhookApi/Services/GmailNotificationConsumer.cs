@@ -168,14 +168,20 @@ public class GmailNotificationConsumer : BackgroundService
 
         // Load user credentials (OAuth2 flow or service account)
         // For demo: using a service account with domain-wide delegation (for G Suite)
-        GoogleCredential credential;
+        UserCredential credential;
         var credentialsPath = _configuration["Google:CredentialsPath"];
         using (var stream = new FileStream(credentialsPath ?? "", FileMode.Open, FileAccess.Read))
         {
-            credential = GoogleCredential.FromStream(stream)
-                .CreateScoped(GmailService.Scope.GmailReadonly);
-            // If using domain-wide delegation:
-            // credential = credential.CreateWithUser("user@yourdomain.com");
+            // credential = GoogleCredential.FromStream(stream)
+            //     .CreateScoped(GmailService.Scope.GmailReadonly);
+            // // If using domain-wide delegation:
+            // // credential = credential.CreateWithUser("ej.baling@gmail.com");
+
+            credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(GoogleClientSecrets.FromStream(stream).Secrets,
+                new[] { GmailService.Scope.GmailReadonly },
+                "user", // any string to identify the user
+                CancellationToken.None
+            );
         }
 
         // Create the Gmail API service

@@ -45,3 +45,4 @@ msbuild.wrn
 # sonarqube
 .sonarqube
 WebhookApi/appsettings.Development.json
+WebhookApi/credentials.json
