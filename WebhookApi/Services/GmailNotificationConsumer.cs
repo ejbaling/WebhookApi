@@ -217,36 +217,53 @@ public class GmailNotificationConsumer : BackgroundService
 
             if (pushData?.HistoryId > 0)
             {
-                var historyRequest = gmailService.Users.History.List("me");
-                historyRequest.StartHistoryId = startHistoryId;
-                historyRequest.HistoryTypes = UsersResource.HistoryResource.ListRequest.HistoryTypesEnum.MessageAdded;
-                var historyResponse = await historyRequest.ExecuteAsync();
-
-                if (historyResponse.History != null)
+                var maxRetries = 3;
+                var delayMs = 2000;
+                int attempt = 0;
+                bool foundMessages = false;
+                do
                 {
-                    foreach (var history in historyResponse.History)
+                    var historyRequest = gmailService.Users.History.List("me");
+                    historyRequest.StartHistoryId = startHistoryId;
+                    historyRequest.HistoryTypes = UsersResource.HistoryResource.ListRequest.HistoryTypesEnum.MessageAdded;
+                    var historyResponse = await historyRequest.ExecuteAsync();
+
+                    if (historyResponse.History != null)
                     {
-                        if (history.MessagesAdded != null)
+                        foreach (var history in historyResponse.History)
                         {
-                            foreach (var msgAdded in history.MessagesAdded)
+                            if (history.MessagesAdded != null)
                             {
-                                var messageId = msgAdded.Message.Id;
-                                var message = await gmailService.Users.Messages.Get("me", messageId).ExecuteAsync();
-                                _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
-                                // You can process the message here
+                                foreach (var msgAdded in history.MessagesAdded)
+                                {
+                                    var messageId = msgAdded.Message.Id;
+                                    var message = await gmailService.Users.Messages.Get("me", messageId).ExecuteAsync();
+                                    _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
+                                    // You can process the message here
+                                    foundMessages = true;
+                                }
                             }
                         }
+                        // Update in-memory last processed historyId
+                        if (historyResponse.HistoryId != null)
+                        {
+                            _lastProcessedHistoryId = historyResponse.HistoryId.Value;
+                        }
                     }
-                    // Update in-memory last processed historyId
-                    if (historyResponse.HistoryId != null)
+                    if (!foundMessages)
                     {
-                        _lastProcessedHistoryId = historyResponse.HistoryId.Value;
+                        attempt++;
+                        if (attempt < maxRetries)
+                        {
+                            _logger.LogWarning("No new messages found in Gmail history. Retrying in {Delay}ms (Attempt {Attempt}/{Max})", delayMs, attempt, maxRetries);
+                            await Task.Delay(delayMs);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("No new messages found in Gmail history after {Max} attempts.", maxRetries);
+                        }
                     }
-                }
-                else
-                {
-                    _logger.LogWarning("No new messages found in Gmail history.");
-                }
+                } while (!foundMessages && attempt < maxRetries);
             }
             else
             {
