@@ -166,47 +166,43 @@ public class GmailNotificationConsumer : BackgroundService
         _logger.LogInformation("Processing Gmail notification from {Timestamp}: {MessageId}",
             notification.Message?.Timestamp, notification.Message?.MessageId);
 
-        // Load user credentials (OAuth2 flow or service account)
-        // For demo: using a service account with domain-wide delegation (for G Suite)
-        UserCredential credential;
-        var credentialsPath = _configuration["Google:CredentialsPath"];
-        using (var stream = new FileStream(credentialsPath ?? "", FileMode.Open, FileAccess.Read))
-        {
-            // credential = GoogleCredential.FromStream(stream)
-            //     .CreateScoped(GmailService.Scope.GmailReadonly);
-            // // If using domain-wide delegation:
-            // // credential = credential.CreateWithUser("ej.baling@gmail.com");
+        // Load Gmail API credentials from configuration
+        var refreshToken = _configuration["Google:RefreshToken"];
+        var clientId = _configuration["Google:ClientId"];
+        var clientSecret = _configuration["Google:ClientSecret"];
 
-            credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(GoogleClientSecrets.FromStream(stream).Secrets,
-                new[] { GmailService.Scope.GmailReadonly },
-                "user", // any string to identify the user
-                CancellationToken.None
-            );
+        if (string.IsNullOrEmpty(refreshToken) || string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
+        {
+            _logger.LogError("Google API credentials are not configured properly.");
+            return;
         }
 
-        // Create the Gmail API service
-        var gmailService = new GmailService(new BaseClientService.Initializer()
+        var token = new Google.Apis.Auth.OAuth2.Responses.TokenResponse { RefreshToken = refreshToken };
+        var secrets = new Google.Apis.Auth.OAuth2.ClientSecrets { ClientId = clientId, ClientSecret = clientSecret };
+        var flow = new Google.Apis.Auth.OAuth2.Flows.GoogleAuthorizationCodeFlow(new Google.Apis.Auth.OAuth2.Flows.GoogleAuthorizationCodeFlow.Initializer
+        {
+            ClientSecrets = secrets,
+            Scopes = new[] { GmailService.Scope.GmailReadonly }
+        });
+        var credential = new Google.Apis.Auth.OAuth2.UserCredential(flow, "user", token);
+
+        var gmailService = new GmailService(new BaseClientService.Initializer
         {
             HttpClientInitializer = credential,
             ApplicationName = "WebhookApi"
         });
 
-        // Use the Message property as the Gmail message ID
         if (!string.IsNullOrEmpty(notification.Message?.MessageId))
         {
             try
             {
-                var messageRequest = gmailService.Users.Messages.Get("me", notification.Message?.MessageId);
+                var messageRequest = gmailService.Users.Messages.Get("me", notification.Message.MessageId);
                 var message = await messageRequest.ExecuteAsync();
-
-                // var snippet = message.Snippet;
                 _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
-
-                // If you want the full body, you can extract it from message.Payload.Parts or message.Payload.Body
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to fetch Gmail message with ID: {MessageId}", notification.Message);
+                _logger.LogError(ex, "Failed to fetch Gmail message with ID: {MessageId}", notification.Message.MessageId);
             }
         }
         else
