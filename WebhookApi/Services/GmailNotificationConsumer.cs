@@ -207,6 +207,7 @@ public class GmailNotificationConsumer : BackgroundService
         if (!string.IsNullOrEmpty(notification.Message?.Data))
         {
             var json = Encoding.UTF8.GetString(Convert.FromBase64String(notification.Message.Data));
+            _logger.LogInformation("Received Gmail push notification data: {Data}", json);
             var pushData = JsonSerializer.Deserialize<GmailPushData>(json);
 
             // ulong startHistoryId = pushData?.HistoryId ?? 0;
