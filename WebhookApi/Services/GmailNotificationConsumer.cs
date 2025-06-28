@@ -46,6 +46,9 @@ public class GmailNotificationConsumer : BackgroundService
     private readonly TimeSpan _reconnectDelay = TimeSpan.FromSeconds(5);
     private readonly IConfiguration _configuration;
 
+    // In-memory storage for last processed historyId (development only)
+    private static ulong _lastProcessedHistoryId = 0;
+
     public GmailNotificationConsumer(
         IConnectionFactory connectionFactory,
         ILogger<GmailNotificationConsumer> logger,
@@ -203,15 +206,19 @@ public class GmailNotificationConsumer : BackgroundService
 
         if (!string.IsNullOrEmpty(notification.Message?.Data))
         {
-            // 1. Decode the base64 data
             var json = Encoding.UTF8.GetString(Convert.FromBase64String(notification.Message.Data));
             var pushData = JsonSerializer.Deserialize<GmailPushData>(json);
 
-            // 2. Use the historyId to get new message IDs
+            ulong startHistoryId = pushData?.HistoryId ?? 0;
+            if (_lastProcessedHistoryId > 0 && _lastProcessedHistoryId < startHistoryId)
+            {
+                startHistoryId = _lastProcessedHistoryId;
+            }
+
             if (pushData?.HistoryId > 0)
             {
                 var historyRequest = gmailService.Users.History.List("me");
-                historyRequest.StartHistoryId = pushData.HistoryId;
+                historyRequest.StartHistoryId = startHistoryId;
                 historyRequest.HistoryTypes = UsersResource.HistoryResource.ListRequest.HistoryTypesEnum.MessageAdded;
                 var historyResponse = await historyRequest.ExecuteAsync();
 
@@ -229,6 +236,11 @@ public class GmailNotificationConsumer : BackgroundService
                                 // You can process the message here
                             }
                         }
+                    }
+                    // Update in-memory last processed historyId
+                    if (historyResponse.HistoryId != null)
+                    {
+                        _lastProcessedHistoryId = historyResponse.HistoryId.Value;
                     }
                 }
                 else
