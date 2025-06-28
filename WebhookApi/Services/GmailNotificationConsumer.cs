@@ -235,13 +235,12 @@ public class GmailNotificationConsumer : BackgroundService
                                 var message = await gmailService.Users.Messages.Get("me", messageId).ExecuteAsync();
                                 _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
                                 // You can process the message here
-                                var messageJson = JsonSerializer.Serialize(message, new JsonSerializerOptions { WriteIndented = true });
-                                _logger.LogInformation("Full Gmail message: {MessageJson}", messageJson);
+                                //var messageJson = JsonSerializer.Serialize(message, new JsonSerializerOptions { WriteIndented = true });
+                                //_logger.LogInformation("Full Gmail message: {MessageJson}", messageJson);
                             }
                         }
                     }
                     // Update in-memory last processed historyId
-                    var maxHistoryId = historyResponse.HistoryId ?? 0;
                     _lastProcessedHistoryId = Math.Max(_lastProcessedHistoryId, historyResponse.HistoryId ?? _lastProcessedHistoryId);
                 }
                 else
