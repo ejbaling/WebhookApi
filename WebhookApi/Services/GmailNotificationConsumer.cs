@@ -11,19 +11,21 @@ using System.Text.Json.Serialization;
 
 namespace WebhookApi.Services;
 
-public class GmailMessage
+public class GmailPushData
 {
     [JsonPropertyName("messageId")]
     public string? MessageId { get; set; }
 
     [JsonPropertyName("publishTime")]
     public DateTime Timestamp { get; set; }
+
+    public string? Data { get; set; }
 }
 
 public class GmailNotification
 {
     [JsonPropertyName("message")]
-    public GmailMessage? Message { get; set; }
+    public GmailPushData? Message { get; set; }
 }
 
 public class GmailNotificationConsumer : BackgroundService
@@ -194,16 +196,22 @@ public class GmailNotificationConsumer : BackgroundService
 
         if (!string.IsNullOrEmpty(notification.Message?.MessageId))
         {
-            try
-            {
-                var messageRequest = gmailService.Users.Messages.Get("me", notification.Message.MessageId);
-                var message = await messageRequest.ExecuteAsync();
-                _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to fetch Gmail message with ID: {MessageId}", notification.Message.MessageId);
-            }
+            var base64 = notification.Message?.Data;
+            var json = Encoding.UTF8.GetString(Convert.FromBase64String(base64));
+            var pushData = JsonSerializer.Deserialize<GmailPushData>(json);
+
+            _logger.LogInformation(json);
+
+            // try
+            // {
+            //     var messageRequest = gmailService.Users.Messages.Get("me", notification.Message.MessageId);
+            //     var message = await messageRequest.ExecuteAsync();
+            //     _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
+            // }
+            // catch (Exception ex)
+            // {
+            //     _logger.LogError(ex, "Failed to fetch Gmail message with ID: {MessageId}", notification.Message.MessageId);
+            // }
         }
         else
         {
