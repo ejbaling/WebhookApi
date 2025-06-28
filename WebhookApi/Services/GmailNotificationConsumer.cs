@@ -235,6 +235,8 @@ public class GmailNotificationConsumer : BackgroundService
                                 var message = await gmailService.Users.Messages.Get("me", messageId).ExecuteAsync();
                                 _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
                                 // You can process the message here
+                                var messageJson = JsonSerializer.Serialize(message, new JsonSerializerOptions { WriteIndented = true });
+                                _logger.LogInformation("Full Gmail message: {MessageJson}", messageJson);
                             }
                         }
                     }
