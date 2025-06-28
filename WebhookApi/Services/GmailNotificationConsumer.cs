@@ -19,6 +19,7 @@ public class GmailPushData
     [JsonPropertyName("publishTime")]
     public DateTime Timestamp { get; set; }
 
+    [JsonPropertyName("data")]
     public string? Data { get; set; }
 }
 
