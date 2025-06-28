@@ -209,17 +209,17 @@ public class GmailNotificationConsumer : BackgroundService
             var json = Encoding.UTF8.GetString(Convert.FromBase64String(notification.Message.Data));
             var pushData = JsonSerializer.Deserialize<GmailPushData>(json);
 
-            ulong startHistoryId = pushData?.HistoryId ?? 0;
-            if (_lastProcessedHistoryId > 0 && _lastProcessedHistoryId < startHistoryId)
-            {
-                startHistoryId = _lastProcessedHistoryId;
-            }
+            // ulong startHistoryId = pushData?.HistoryId ?? 0;
+            // if (_lastProcessedHistoryId > 0 && _lastProcessedHistoryId < startHistoryId)
+            // {
+            //     startHistoryId = _lastProcessedHistoryId;
+            // }
 
             if (pushData?.HistoryId > 0)
             {
                 // Simplified: single attempt to fetch new messages
                 var historyRequest = gmailService.Users.History.List("me");
-                historyRequest.StartHistoryId = startHistoryId;
+                historyRequest.StartHistoryId = _lastProcessedHistoryId ;
                 historyRequest.HistoryTypes = UsersResource.HistoryResource.ListRequest.HistoryTypesEnum.MessageAdded;
                 var historyResponse = await historyRequest.ExecuteAsync();
 
