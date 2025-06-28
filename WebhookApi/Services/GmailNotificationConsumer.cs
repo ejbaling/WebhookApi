@@ -32,6 +32,15 @@ public class GmailMessage
     public string? Data { get; set; }
 }
 
+public class GmailPushData
+{
+    [JsonPropertyName("message")]
+    public GmailMessage Message { get; set; }
+
+    [JsonPropertyName("subscription")]
+    public string subscription { get; set; }
+}
+
 public class GmailNotificationConsumer : BackgroundService
 {
     private IConnection? _connection;
@@ -110,22 +119,22 @@ public class GmailNotificationConsumer : BackgroundService
                 Console.WriteLine(" [*] Waiting for messages.");
 
                 var consumer = new AsyncEventingBasicConsumer(_channel);
-                consumer.ReceivedAsync  += async (model, ea) =>
+                consumer.ReceivedAsync += async (model, ea) =>
                 {
                     var body = ea.Body.ToArray();
-                    var message = Encoding.UTF8.GetString(body);
+                    var strBody = Encoding.UTF8.GetString(body);
 
                     try
                     {
-                        _logger.LogInformation("Processing message: {Message}", message);
-                        
-                        var gmailMessage = JsonSerializer.Deserialize<GmailMessage>(message);
-                        if (gmailMessage != null)
+                        _logger.LogInformation("Processing message: {Message}", strBody);
+
+                        var gmailPushData = JsonSerializer.Deserialize<GmailPushData>(strBody);
+                        if (gmailPushData != null)
                         {
                             // Process the notification
-                            await ProcessNotification(gmailMessage);
+                            await ProcessNotification(gmailPushData.Message);
                         }
-                        
+
                         await _channel.BasicAckAsync(ea.DeliveryTag, false);
                     }
                     catch (Exception ex)
@@ -135,8 +144,8 @@ public class GmailNotificationConsumer : BackgroundService
                             multiple: false,
                             requeue: true
                         );
-    
-                        _logger.LogError(ex, "Error processing message: {Message}", message);
+
+                        _logger.LogError(ex, "Error processing message: {Message}", strBody);
                         // Consider implementing dead letter queue handling here
                     }
                 };
@@ -145,7 +154,7 @@ public class GmailNotificationConsumer : BackgroundService
                     queue: QueueName,
                     autoAck: false,
                     consumer: consumer);
-            
+
 
                 // Keep the service running until cancellation is requested
                 while (!stoppingToken.IsCancellationRequested)
