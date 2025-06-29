@@ -8,6 +8,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Telegram.Bot;
 
 namespace WebhookApi.Services;
 
@@ -35,10 +36,10 @@ public class GmailMessage
 public class GmailPushData
 {
     [JsonPropertyName("message")]
-    public GmailMessage Message { get; set; }
+    public GmailMessage? Message { get; set; }
 
     [JsonPropertyName("subscription")]
-    public string subscription { get; set; }
+    public string? subscription { get; set; }
 }
 
 public class GmailNotificationConsumer : BackgroundService
@@ -129,7 +130,7 @@ public class GmailNotificationConsumer : BackgroundService
                         _logger.LogInformation("Processing message: {Message}", strBody);
 
                         var gmailPushData = JsonSerializer.Deserialize<GmailPushData>(strBody);
-                        if (gmailPushData != null)
+                        if (gmailPushData?.Message != null)
                         {
                             // Process the notification
                             await ProcessNotification(gmailPushData.Message);
@@ -255,6 +256,26 @@ public class GmailNotificationConsumer : BackgroundService
                                     if (isInRange.HasValue)
                                     {
                                         _logger.LogInformation("Current date is {Status} the reservation range.", isInRange.Value ? "within" : "outside");
+                                        if (isInRange.Value)
+                                        {
+                                            // Forward to Telegram if in range
+                                            // Send message to Telegram
+                                            var botToken = _configuration["Telegram:BotToken"];
+                                            var chatId = _configuration["Telegram:ChatId"]; // Your personal Telegram user ID
+                                            if (string.IsNullOrWhiteSpace(botToken) || string.IsNullOrWhiteSpace(chatId))
+                                            {
+                                                _logger.LogError("Telegram BotToken or chatIc is not configured.");
+                                                return;
+                                            }
+                                            string telegramMessage = $"Reservation in range: {subject}";
+                                            // Replace with your actual chatId and botClient instance
+                                             var botClient = new TelegramBotClient(botToken);
+                                            await botClient.SendTextMessageAsync(
+                                                new Telegram.Bot.Types.ChatId(chatId),
+                                                text: telegramMessage,
+                                                cancellationToken: CancellationToken.None);
+                                            _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
+                                        }
                                     }
                                 }
                                 catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
