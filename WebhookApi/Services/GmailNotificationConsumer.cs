@@ -269,7 +269,7 @@ public class GmailNotificationConsumer : BackgroundService
                                             }
                                             string telegramMessage = $"Reservation in range: {subject}";
                                             // Replace with your actual chatId and botClient instance
-                                             var botClient = new TelegramBotClient(botToken);
+                                            var botClient = new TelegramBotClient(botToken);
                                             await botClient.SendTextMessageAsync(
                                                 new Telegram.Bot.Types.ChatId(chatId),
                                                 text: telegramMessage,

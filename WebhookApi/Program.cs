@@ -106,6 +106,7 @@ app.MapPost("sms/notifications", async (HttpContext context, IConnectionFactory 
 
     string messageToSend;
     string phoneNumber = "";
+    
     try
     {
         var json = JsonDocument.Parse(requestBody);
@@ -128,6 +129,14 @@ app.MapPost("sms/notifications", async (HttpContext context, IConnectionFactory 
     catch (JsonException)
     {
         messageToSend = "Invalid JSON in requestBody.";
+    }
+
+    // Check if phoneNumber is blacklisted
+    var blackListedPhoneNumbers = config.GetSection("BlackListedPhoneNumbers").Get<string[]>();
+    if (blackListedPhoneNumbers != null && blackListedPhoneNumbers.Contains(phoneNumber, StringComparer.OrdinalIgnoreCase))
+    {
+        logger.LogInformation("Phone number {PhoneNumber} is blacklisted. Not sending message to Telegram.", phoneNumber);
+        return Results.Ok("Phone number is blacklisted.");
     }
 
     await botClient.SendTextMessageAsync(
