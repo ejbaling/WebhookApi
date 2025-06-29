@@ -296,8 +296,9 @@ public class GmailNotificationConsumer : BackgroundService
             int year = int.Parse(match.Groups[4].Value);
             var startDate = DateTime.ParseExact($"{month} {startDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
             var endDate = DateTime.ParseExact($"{month} {endDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
-            var today = DateTime.Now.Date;
-            return today >= startDate && today <= endDate;
+            var philippinesTime = DateTime.Now.Date.AddHours(-5); // Subtract 5 hours from today
+            _logger.LogInformation("Current Philippines date {PhilippinesTime}", philippinesTime);
+            return philippinesTime >= startDate && philippinesTime <= endDate;
         }
         return null;
     }
