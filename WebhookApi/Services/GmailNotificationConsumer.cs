@@ -317,10 +317,10 @@ public class GmailNotificationConsumer : BackgroundService
             int year = int.Parse(match.Groups[4].Value);
             var startDate = DateTime.ParseExact($"{month} {startDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
             var endDate = DateTime.ParseExact($"{month} {endDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
-            var philippinesTime = DateTime.Now.AddHours(-4); // Subtract 4 hours from today's time so it will send urgent messages after the 2 pm check-in.
-            startDate = startDate.Date.AddHours(14); // Start time at 2 PM
+            var philippinesTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila");
+            var philippinesTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, philippinesTimeZone);
+            startDate = startDate.Date; // Start time at 2 PM
             endDate = endDate.Date.AddHours(12); // End time at 12 PM
-            _logger.LogInformation("Current Philippines date {PhilippinesTime}", philippinesTime);
             _logger.LogInformation("Reservation start date: {StartDate}, end date: {EndDate}", startDate, endDate);
             _logger.LogInformation("Current Philippines date {PhilippinesTime}", philippinesTime);
             return philippinesTime >= startDate && philippinesTime <= endDate;
