@@ -249,6 +249,13 @@ public class GmailNotificationConsumer : BackgroundService
 
                                     string subject = message.Payload?.Headers?.FirstOrDefault(h => h.Name == "Subject")?.Value ?? "(No Subject)";
                                     _logger.LogInformation("Email subject: {Subject}", subject);
+
+                                    // Extract date range from subject and check if today is in range
+                                    bool? isInRange = IsCurrentDateInReservationRange(subject);
+                                    if (isInRange.HasValue)
+                                    {
+                                        _logger.LogInformation("Current date is {Status} the reservation range.", isInRange.Value ? "within" : "outside");
+                                    }
                                 }
                                 catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
                                 {
@@ -274,6 +281,25 @@ public class GmailNotificationConsumer : BackgroundService
         {
             _logger.LogWarning("Notification does not contain a data field.");
         }
+    }
+
+    // Helper: Extract date range from subject and check if current date is in range
+    private bool? IsCurrentDateInReservationRange(string subject)
+    {
+        // Example: Reservation at Redwood Iloilo Kowhai holiday room for Apr 18 - 29, 2025
+        var match = System.Text.RegularExpressions.Regex.Match(subject, @"for (\w{3}) (\d{1,2}) - (\d{1,2}), (\d{4})");
+        if (match.Success)
+        {
+            string month = match.Groups[1].Value;
+            int startDay = int.Parse(match.Groups[2].Value);
+            int endDay = int.Parse(match.Groups[3].Value);
+            int year = int.Parse(match.Groups[4].Value);
+            var startDate = DateTime.ParseExact($"{month} {startDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
+            var endDate = DateTime.ParseExact($"{month} {endDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
+            var today = DateTime.Now.Date;
+            return today >= startDate && today <= endDate;
+        }
+        return null;
     }
 
     private void CleanupConnection()
