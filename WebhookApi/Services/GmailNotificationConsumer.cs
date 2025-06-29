@@ -322,6 +322,7 @@ public class GmailNotificationConsumer : BackgroundService
             endDate = endDate.Date.AddHours(12); // End time at 12 PM
             _logger.LogInformation("Current Philippines date {PhilippinesTime}", philippinesTime);
             _logger.LogInformation("Reservation start date: {StartDate}, end date: {EndDate}", startDate, endDate);
+            _logger.LogInformation("Current Philippines date {PhilippinesTime}", philippinesTime);
             return philippinesTime >= startDate && philippinesTime <= endDate;
         }
         return null;
