@@ -216,12 +216,6 @@ public class GmailNotificationConsumer : BackgroundService
             _logger.LogInformation("Received Gmail push notification data: {Data}", json);
             var data = JsonSerializer.Deserialize<GmailMessageData>(json);
 
-            // ulong startHistoryId = pushData?.HistoryId ?? 0;
-            // if (_lastProcessedHistoryId > 0 && _lastProcessedHistoryId < startHistoryId)
-            // {
-            //     startHistoryId = _lastProcessedHistoryId;
-            // }
-
             if (data != null && data.HistoryId > 0)
             {
                 if (_lastProcessedHistoryId == 0)
@@ -248,10 +242,13 @@ public class GmailNotificationConsumer : BackgroundService
                                 try
                                 {
                                     var message = await gmailService.Users.Messages.Get("me", messageId).ExecuteAsync();
-                                    _logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
+                                    //_logger.LogInformation("Fetched Gmail message snippet: {Snippet}", message.Snippet);
                                     // Optionally log the full message as JSON
-                                    var messageJson = JsonSerializer.Serialize(message, new JsonSerializerOptions { WriteIndented = true });
-                                    _logger.LogInformation("Full Gmail message: {MessageJson}", messageJson);
+                                    // var messageJson = JsonSerializer.Serialize(message, new JsonSerializerOptions { WriteIndented = true });
+                                    // _logger.LogInformation("Full Gmail message: {MessageJson}", messageJson);
+
+                                    string subject = message.Payload?.Headers?.FirstOrDefault(h => h.Name == "Subject")?.Value ?? "(No Subject)";
+                                    _logger.LogInformation("Email subject: {Subject}", subject);
                                 }
                                 catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
                                 {
