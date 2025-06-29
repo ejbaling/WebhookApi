@@ -319,7 +319,7 @@ public class GmailNotificationConsumer : BackgroundService
             var endDate = DateTime.ParseExact($"{month} {endDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
             var philippinesTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila");
             var philippinesTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, philippinesTimeZone);
-            startDate = startDate.Date; // Start time at 2 PM
+            startDate = startDate.Date.AddHours(14); // Start time at 2 PM
             endDate = endDate.Date.AddHours(12); // End time at 12 PM
             _logger.LogInformation("Reservation start date: {StartDate}, end date: {EndDate}", startDate, endDate);
             _logger.LogInformation("Current Philippines date {PhilippinesTime}", philippinesTime);
