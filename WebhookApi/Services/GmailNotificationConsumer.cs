@@ -307,8 +307,8 @@ public class GmailNotificationConsumer : BackgroundService
     // Helper: Extract date range from subject and check if current date is in range
     private bool? IsCurrentDateInReservationRange(string subject)
     {
-        // Example: Reservation at Redwood Iloilo Kowhai holiday room for Apr 18 - 29, 2025
-        var match = System.Text.RegularExpressions.Regex.Match(subject, @"for (\w{3}) (\d{1,2}) - (\d{1,2}), (\d{4})");
+        // Example: Reservation at Redwood Iloilo Kowhai holiday room Apr 18 - 29, 2025 or Apr 18 - 29 and any additional text
+        var match = System.Text.RegularExpressions.Regex.Match(subject, @"(\w{3}) (\d{1,2}) - (\d{1,2})(?:, (\d{4}))?\s*(.*)");
         if (match.Success)
         {
             string month = match.Groups[1].Value;
