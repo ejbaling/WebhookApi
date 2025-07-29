@@ -314,10 +314,11 @@ public class GmailNotificationConsumer : BackgroundService
             string month = match.Groups[1].Value;
             int startDay = int.Parse(match.Groups[2].Value);
             int endDay = int.Parse(match.Groups[3].Value);
-            int year = int.Parse(match.Groups[4].Value);
+            var timeZoneId = "Asia/Manila";
+            var philippinesTimeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            int year = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, philippinesTimeZone).Year;
             var startDate = DateTime.ParseExact($"{month} {startDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
             var endDate = DateTime.ParseExact($"{month} {endDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
-            var philippinesTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila");
             var philippinesTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, philippinesTimeZone);
             startDate = startDate.Date.AddHours(14); // Start time at 2 PM
             endDate = endDate.Date.AddHours(12); // End time at 12 PM
