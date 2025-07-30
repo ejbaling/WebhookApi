@@ -1,8 +1,11 @@
+
+
 namespace WebhookAPi;
 public class Calculator
 {
-    public int AddNumbers(int a, int b)
+    public int MultiplyNumbers(int a, int b)
     {
-        return checked(a + b);
+        return checked(a * b);
     }
 }
+
