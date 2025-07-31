@@ -321,28 +321,36 @@ public class GmailNotificationConsumer : BackgroundService
             string startMonth = match.Groups[1].Value;
             int startDay = int.Parse(match.Groups[2].Value);
 
-            if (match.Groups[3].Success)
+            try
             {
-                // Two different months
-                string endMonth = match.Groups[3].Value;
-                int endDay = int.Parse(match.Groups[4].Value);
-                startDate = DateTime.ParseExact($"{startMonth} {startDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
-                endDate = DateTime.ParseExact($"{endMonth} {endDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
+                if (match.Groups[3].Success)
+                {
+                    // Two different months
+                    string endMonth = match.Groups[3].Value;
+                    int endDay = int.Parse(match.Groups[4].Value);
+                    startDate = DateTime.ParseExact($"{startMonth} {startDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
+                    endDate = DateTime.ParseExact($"{endMonth} {endDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    // Same month
+                    string month = startMonth;
+                    int endDay = int.Parse(match.Groups[6].Value);
+                    startDate = DateTime.ParseExact($"{month} {startDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
+                    endDate = DateTime.ParseExact($"{month} {endDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
+                    startDate = startDate.Date.AddHours(14); // Start time at 2 PM
+                    endDate = endDate.Date.AddHours(12); // End time at 12 PM
+
+                }
+                _logger.LogInformation("Reservation start date: {StartDate}, end date: {EndDate}", startDate, endDate);
+                _logger.LogInformation("Current Philippines date {PhilippinesTime}", philippinesTime);
+                return philippinesTime >= startDate && philippinesTime <= endDate;
             }
-            else
+            catch (Exception ex)
             {
-                // Same month
-                string month = startMonth;
-                int endDay = int.Parse(match.Groups[6].Value);
-                startDate = DateTime.ParseExact($"{month} {startDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
-                endDate = DateTime.ParseExact($"{month} {endDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
-                startDate = startDate.Date.AddHours(14); // Start time at 2 PM
-                endDate = endDate.Date.AddHours(12); // End time at 12 PM
-                
+                _logger.LogError("Error parsing date range from subject: {Subject}", subject);
+                _logger.LogError(ex.Message);
             }
-            _logger.LogInformation("Reservation start date: {StartDate}, end date: {EndDate}", startDate, endDate);
-            _logger.LogInformation("Current Philippines date {PhilippinesTime}", philippinesTime);
-            return philippinesTime >= startDate && philippinesTime <= endDate;
         }
         return null;
     }
