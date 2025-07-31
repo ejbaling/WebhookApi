@@ -338,10 +338,12 @@ public class GmailNotificationConsumer : BackgroundService
                     int endDay = int.Parse(match.Groups[6].Value);
                     startDate = DateTime.ParseExact($"{month} {startDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
                     endDate = DateTime.ParseExact($"{month} {endDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
-                    startDate = startDate.Date.AddHours(14); // Start time at 2 PM
-                    endDate = endDate.Date.AddHours(12); // End time at 12 PM
-
                 }
+
+                // Adjust start and end times to specific hours
+                startDate = startDate.Date.AddHours(14); // Start time at 2 PM
+                endDate = endDate.Date.AddHours(12); // End time at 12 PM
+
                 _logger.LogInformation("Reservation start date: {StartDate}, end date: {EndDate}", startDate, endDate);
                 _logger.LogInformation("Current Philippines date {PhilippinesTime}", philippinesTime);
                 return philippinesTime >= startDate && philippinesTime <= endDate;
