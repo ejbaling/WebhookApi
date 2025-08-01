@@ -270,7 +270,7 @@ public class GmailNotificationConsumer : BackgroundService
                                                 return;
                                             }
                                             var emailBody = message.Payload != null ? ExtractCleanMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
-                                            var telegramMessage = $"Subject: {ExtractCleanMessage(subject).Trim()}, Message: {emailBody.Trim()}";
+                                            var telegramMessage = $"Subject: {ExtractCleanMessage(subject)}, Message: {emailBody}";
                                             // Replace with your actual chatId and botClient instance
                                             var botClient = new TelegramBotClient(botToken);
                                             await botClient.SendTextMessageAsync(
@@ -312,6 +312,7 @@ public class GmailNotificationConsumer : BackgroundService
         if (string.IsNullOrWhiteSpace(rawMessage))
             return string.Empty;
 
+        // Step 1: Remove email headers (From:, Date:, Subject:, To:)
         string[] headerPrefixes = { "From:", "Date:", "Subject:", "To:" };
         string[] skipPrefixes = { "Reply", "You can also respond", "<", "." };
 
@@ -324,8 +325,22 @@ public class GmailNotificationConsumer : BackgroundService
                 !skipPrefixes.Any(skip => line.StartsWith(skip, StringComparison.OrdinalIgnoreCase)))
             .ToList();
 
+        // Step 2: Remove URLs (optional)
+        for (int i = 0; i < lines.Count; i++)
+            lines[i] = Regex.Replace(lines[i], @"https?://[^\s]+", ""); // strip links
+        // Remove empty lines
+        lines = [.. lines.Where(line => !string.IsNullOrWhiteSpace(line))];
+
+        // Step 3: Remove tags like [image: Airbnb]
+        lines = [.. lines.Where(line => !line.TrimStart().StartsWith("[image:", StringComparison.OrdinalIgnoreCase))];
+
+        // Step 4: Join cleaned lines
         string cleanMessage = string.Join("\n", lines);
 
+        // Step 5: Collapse multiple spaces
+        cleanMessage = Regex.Replace(cleanMessage, @"\s{2,}", " ");
+
+        // Step 6: Truncate to maxLength
         return cleanMessage.Length <= maxLength
             ? cleanMessage
             : cleanMessage.Substring(0, maxLength - 3) + "...";
