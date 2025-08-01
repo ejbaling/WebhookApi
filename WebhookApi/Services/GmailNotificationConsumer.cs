@@ -267,7 +267,8 @@ public class GmailNotificationConsumer : BackgroundService
                                                 _logger.LogError("Telegram BotToken or chatIc is not configured.");
                                                 return;
                                             }
-                                            string telegramMessage = $"Reservation in range: {subject}";
+                                            var emailBody = message.Payload != null ? GetEmailBody(message.Payload) : string.Empty;
+                                            var telegramMessage = $"Subject: {subject}, Message: {emailBody}";
                                             // Replace with your actual chatId and botClient instance
                                             var botClient = new TelegramBotClient(botToken);
                                             await botClient.SendTextMessageAsync(
@@ -302,6 +303,24 @@ public class GmailNotificationConsumer : BackgroundService
         {
             _logger.LogWarning("Notification does not contain a data field.");
         }
+    }
+
+    private string GetEmailBody(MessagePart payload)
+    {
+        if (payload.Parts == null || payload.Parts.Count == 0)
+        {
+            return payload.Body?.Data != null ? Encoding.UTF8.GetString(Convert.FromBase64String(payload.Body.Data)) : string.Empty;
+        }
+
+        // If there are parts, we assume the first part is the text/plain part
+        var textPart = payload.Parts.FirstOrDefault(p => p.MimeType == "text/plain");
+        if (textPart != null && textPart.Body?.Data != null)
+        {
+            return Encoding.UTF8.GetString(Convert.FromBase64String(textPart.Body.Data));
+        }
+
+        // Fallback to the first part's body if no text/plain part found
+        return payload.Parts[0].Body?.Data != null ? Encoding.UTF8.GetString(Convert.FromBase64String(payload.Parts[0].Body.Data)) : string.Empty;
     }
 
     // Helper: Extract date range from subject and check if current date is in range
@@ -356,6 +375,8 @@ public class GmailNotificationConsumer : BackgroundService
         }
         return null;
     }
+
+
 
     private void CleanupConnection()
     {
