@@ -4,6 +4,7 @@ using Google.Apis.Gmail.v1.Data;
 using Google.Apis.Services;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -268,7 +269,7 @@ public class GmailNotificationConsumer : BackgroundService
                                                 _logger.LogError("Telegram BotToken or chatIc is not configured.");
                                                 return;
                                             }
-                                            var emailBody = message.Payload != null ? ExtractPlainTextMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
+                                            var emailBody = message.Payload != null ? ExtractCleanMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
                                             var telegramMessage = $"Subject: {subject}, Message: {emailBody}";
                                             // Replace with your actual chatId and botClient instance
                                             var botClient = new TelegramBotClient(botToken);
@@ -306,59 +307,59 @@ public class GmailNotificationConsumer : BackgroundService
         }
     }
 
-    private string ExtractPlainTextMessage(string rawMessage, int maxLength = 160)
+    private string ExtractCleanMessage(string rawMessage, int maxLength = 160)
     {
         if (string.IsNullOrWhiteSpace(rawMessage))
             return string.Empty;
 
-        // Step 1: Remove email headers (From:, Date:, Subject:, To:)
         string[] headerPrefixes = { "From:", "Date:", "Subject:", "To:" };
+        string[] skipPrefixes = { "Reply", "You can also respond", "<", "." };
+
         var lines = rawMessage.Split(new[] { '\r', '\n' }, StringSplitOptions.None)
-                      .Select(line => RemoveInvisibleCharacters(line).Trim()) // normalize whitespace and remove invisible characters
-                      .Where(line =>
-                          !string.IsNullOrWhiteSpace(line) && // skip blank or whitespace-only lines
-                          !headerPrefixes.Any(prefix => line.StartsWith(prefix))) // skip header lines
-                      .ToList();
+            .Select(RemoveInvisibleCharacters)
+            .Select(line => line.Trim())
+            .Where(line =>
+                !string.IsNullOrWhiteSpace(line) &&
+                !headerPrefixes.Any(prefix => line.StartsWith(prefix)) &&
+                !skipPrefixes.Any(skip => line.StartsWith(skip, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
 
-        // Step 2: Remove URLs (optional)
-        for (int i = 0; i < lines.Count; i++)
-        {
-            lines[i] = Regex.Replace(lines[i], @"https?://[^\s]+", ""); // strip links
-        }
+        string cleanMessage = string.Join("\n", lines);
 
-        // Step 3: Remove tags like [image: Airbnb]
-        lines = lines.Where(line => !line.TrimStart().StartsWith("[image:", StringComparison.OrdinalIgnoreCase)).ToList();
-
-        // Step 4: Join cleaned lines
-        string cleanMessage = string.Join("\n", lines).Trim();
-
-        // Step 5: Collapse multiple spaces
-        cleanMessage = Regex.Replace(cleanMessage, @"\s{2,}", " ");
-
-        // Step 6: Truncate to maxLength
         return cleanMessage.Length <= maxLength
             ? cleanMessage
             : cleanMessage.Substring(0, maxLength - 3) + "...";
     }
 
-    // Strips non-breaking spaces, zero-width spaces, and other invisible chars
+    // Remove invisible characters (including soft hyphen, non-breaking space, etc.)
     private string RemoveInvisibleCharacters(string input)
     {
         if (string.IsNullOrEmpty(input)) return string.Empty;
 
-        // Common invisible characters
-        var invisibleChars = new[]
+        // Unicode categories that include invisible, formatting, control, etc.
+        var clean = new StringBuilder(input.Length);
+        foreach (char c in input)
         {
-            '\u00A0', // Non-breaking space
-            '\u200B', // Zero width space
-            '\u200C', // Zero width non-joiner
-            '\u200D', // Zero width joiner
-            '\u202F', // Narrow no-break space
-            '\u2060', // Word joiner
-            '\uFEFF'  // Zero width no-break space
-        };
+            // CharUnicodeInfo.GetUnicodeCategory helps filter formatting/control chars
+            var category = CharUnicodeInfo.GetUnicodeCategory(c);
+            if (category != UnicodeCategory.Format &&
+                category != UnicodeCategory.Control &&
+                category != UnicodeCategory.OtherNotAssigned)
+            {
+                clean.Append(c);
+            }
+        }
 
-        return new string(input.Where(c => !invisibleChars.Contains(c)).ToArray());
+        // Remove soft hyphen, non-breaking space, zero-width joiners, etc.
+        string result = clean.ToString();
+        result = result.Replace("\u00A0", " ")  // non-breaking space
+                       .Replace("\u200B", "")   // zero-width space
+                       .Replace("\u200C", "")   // zero-width non-joiner
+                       .Replace("\u200D", "")   // zero-width joiner
+                       .Replace("\uFEFF", "")   // zero-width no-break space
+                       .Replace("\u00AD", "");  // soft hyphen
+
+        return result;
     }
 
     private string GetEmailBody(MessagePart payload)
