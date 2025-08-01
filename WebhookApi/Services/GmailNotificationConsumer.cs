@@ -313,9 +313,12 @@ public class GmailNotificationConsumer : BackgroundService
 
         // Step 1: Remove email headers (From:, Date:, Subject:, To:)
         string[] headerPrefixes = { "From:", "Date:", "Subject:", "To:" };
-        var lines = rawMessage.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                              .Where(line => !headerPrefixes.Any(prefix => line.TrimStart().StartsWith(prefix)))
-                              .ToList();
+        var lines = rawMessage.Split(new[] { '\r', '\n' }, StringSplitOptions.None)
+                      .Select(line => line.Trim()) // remove invisible padding
+                      .Where(line =>
+                          !string.IsNullOrWhiteSpace(line) && // skip blank or whitespace-only lines
+                          !headerPrefixes.Any(prefix => line.StartsWith(prefix)))
+                      .ToList();
 
         // Step 2: Remove URLs (optional)
         for (int i = 0; i < lines.Count; i++)
