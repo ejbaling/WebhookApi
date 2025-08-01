@@ -357,7 +357,14 @@ public class GmailNotificationConsumer : BackgroundService
                        .Replace("\u200C", "")   // zero-width non-joiner
                        .Replace("\u200D", "")   // zero-width joiner
                        .Replace("\uFEFF", "")   // zero-width no-break space
-                       .Replace("\u00AD", "");  // soft hyphen
+                       .Replace("\u00AD", "")  // soft hyphen
+                       .Replace("\u2060", "")  // narrow no-break space
+                       .Replace("\u202F", "")  // narrow no-break space
+                       .Replace("\u202A", "")  // Bidi controls, this line and below
+                       .Replace("\u202B", "")
+                       .Replace("\u202C", "")
+                       .Replace("\u202D", "")
+                       .Replace("\u202E", "");
 
         return result;
     }
