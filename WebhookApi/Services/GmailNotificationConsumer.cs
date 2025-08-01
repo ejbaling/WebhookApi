@@ -327,7 +327,7 @@ public class GmailNotificationConsumer : BackgroundService
         lines = lines.Where(line => !line.TrimStart().StartsWith("[image:", StringComparison.OrdinalIgnoreCase)).ToList();
 
         // Step 4: Join cleaned lines
-        string cleanMessage = string.Join(" ", lines).Trim();
+        string cleanMessage = string.Join("\n", lines).Trim();
 
         // Step 5: Collapse multiple spaces
         cleanMessage = Regex.Replace(cleanMessage, @"\s{2,}", " ");
