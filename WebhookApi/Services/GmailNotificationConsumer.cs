@@ -268,7 +268,7 @@ public class GmailNotificationConsumer : BackgroundService
                                                 _logger.LogError("Telegram BotToken or chatIc is not configured.");
                                                 return;
                                             }
-                                            var emailBody = message.Payload != null ? ExtractPlainTextMessage(GetEmailBody(message.Payload)) : string.Empty;
+                                            var emailBody = message.Payload != null ? ExtractPlainTextMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
                                             var telegramMessage = $"Subject: {subject}, Message: {emailBody}";
                                             // Replace with your actual chatId and botClient instance
                                             var botClient = new TelegramBotClient(botToken);
