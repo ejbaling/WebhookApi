@@ -314,10 +314,10 @@ public class GmailNotificationConsumer : BackgroundService
         // Step 1: Remove email headers (From:, Date:, Subject:, To:)
         string[] headerPrefixes = { "From:", "Date:", "Subject:", "To:" };
         var lines = rawMessage.Split(new[] { '\r', '\n' }, StringSplitOptions.None)
-                      .Select(line => line.Trim()) // remove invisible padding
+                      .Select(line => RemoveInvisibleCharacters(line).Trim()) // normalize whitespace and remove invisible characters
                       .Where(line =>
                           !string.IsNullOrWhiteSpace(line) && // skip blank or whitespace-only lines
-                          !headerPrefixes.Any(prefix => line.StartsWith(prefix)))
+                          !headerPrefixes.Any(prefix => line.StartsWith(prefix))) // skip header lines
                       .ToList();
 
         // Step 2: Remove URLs (optional)
@@ -339,6 +339,26 @@ public class GmailNotificationConsumer : BackgroundService
         return cleanMessage.Length <= maxLength
             ? cleanMessage
             : cleanMessage.Substring(0, maxLength - 3) + "...";
+    }
+
+    // Strips non-breaking spaces, zero-width spaces, and other invisible chars
+    private string RemoveInvisibleCharacters(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return string.Empty;
+
+        // Common invisible characters
+        var invisibleChars = new[]
+        {
+            '\u00A0', // Non-breaking space
+            '\u200B', // Zero width space
+            '\u200C', // Zero width non-joiner
+            '\u200D', // Zero width joiner
+            '\u202F', // Narrow no-break space
+            '\u2060', // Word joiner
+            '\uFEFF'  // Zero width no-break space
+        };
+
+        return new string(input.Where(c => !invisibleChars.Contains(c)).ToArray());
     }
 
     private string GetEmailBody(MessagePart payload)
