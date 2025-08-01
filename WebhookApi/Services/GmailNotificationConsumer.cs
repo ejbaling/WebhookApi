@@ -8,6 +8,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Telegram.Bot;
 
 namespace WebhookApi.Services;
@@ -267,7 +268,7 @@ public class GmailNotificationConsumer : BackgroundService
                                                 _logger.LogError("Telegram BotToken or chatIc is not configured.");
                                                 return;
                                             }
-                                            var emailBody = message.Payload != null ? GetEmailBody(message.Payload) : string.Empty;
+                                            var emailBody = message.Payload != null ? ExtractPlainTextMessage(GetEmailBody(message.Payload)) : string.Empty;
                                             var telegramMessage = $"Subject: {subject}, Message: {emailBody}";
                                             // Replace with your actual chatId and botClient instance
                                             var botClient = new TelegramBotClient(botToken);
@@ -303,6 +304,38 @@ public class GmailNotificationConsumer : BackgroundService
         {
             _logger.LogWarning("Notification does not contain a data field.");
         }
+    }
+
+    private string ExtractPlainTextMessage(string rawMessage, int maxLength = 160)
+    {
+        if (string.IsNullOrWhiteSpace(rawMessage))
+            return string.Empty;
+
+        // Step 1: Remove email headers (From:, Date:, Subject:, To:)
+        string[] headerPrefixes = { "From:", "Date:", "Subject:", "To:" };
+        var lines = rawMessage.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                              .Where(line => !headerPrefixes.Any(prefix => line.TrimStart().StartsWith(prefix)))
+                              .ToList();
+
+        // Step 2: Remove URLs (optional)
+        for (int i = 0; i < lines.Count; i++)
+        {
+            lines[i] = Regex.Replace(lines[i], @"https?://[^\s]+", ""); // strip links
+        }
+
+        // Step 3: Remove tags like [image: Airbnb]
+        lines = lines.Where(line => !line.TrimStart().StartsWith("[image:", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        // Step 4: Join cleaned lines
+        string cleanMessage = string.Join(" ", lines).Trim();
+
+        // Step 5: Collapse multiple spaces
+        cleanMessage = Regex.Replace(cleanMessage, @"\s{2,}", " ");
+
+        // Step 6: Truncate to maxLength
+        return cleanMessage.Length <= maxLength
+            ? cleanMessage
+            : cleanMessage.Substring(0, maxLength - 3) + "...";
     }
 
     private string GetEmailBody(MessagePart payload)
