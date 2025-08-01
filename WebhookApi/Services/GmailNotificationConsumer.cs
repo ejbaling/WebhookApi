@@ -270,7 +270,7 @@ public class GmailNotificationConsumer : BackgroundService
                                                 return;
                                             }
                                             var emailBody = message.Payload != null ? ExtractCleanMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
-                                            var telegramMessage = $"Subject: {ExtractCleanMessage(subject)}, Message: {emailBody}";
+                                            var telegramMessage = $"Subject: {ExtractCleanMessage(subject).Trim()}, Message: {emailBody.Trim()}";
                                             // Replace with your actual chatId and botClient instance
                                             var botClient = new TelegramBotClient(botToken);
                                             await botClient.SendTextMessageAsync(
