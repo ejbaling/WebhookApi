@@ -309,18 +309,44 @@ public class GmailNotificationConsumer : BackgroundService
     {
         if (payload.Parts == null || payload.Parts.Count == 0)
         {
-            return payload.Body?.Data != null ? Encoding.UTF8.GetString(Convert.FromBase64String(payload.Body.Data)) : string.Empty;
+            return payload.Body?.Data != null ? DecodeBase64(payload.Body.Data) : string.Empty;
         }
 
         // If there are parts, we assume the first part is the text/plain part
         var textPart = payload.Parts.FirstOrDefault(p => p.MimeType == "text/plain");
         if (textPart != null && textPart.Body?.Data != null)
         {
-            return Encoding.UTF8.GetString(Convert.FromBase64String(textPart.Body.Data));
+            return DecodeBase64(textPart.Body.Data);
         }
 
         // Fallback to the first part's body if no text/plain part found
-        return payload.Parts[0].Body?.Data != null ? Encoding.UTF8.GetString(Convert.FromBase64String(payload.Parts[0].Body.Data)) : string.Empty;
+        return payload.Parts[0].Body?.Data != null ? DecodeBase64(payload.Parts[0].Body.Data) : string.Empty;
+    }
+
+    // Helper method to decode Base64 safely
+    private string DecodeBase64(string base64)
+    {
+        if (string.IsNullOrEmpty(base64)) return string.Empty;
+
+        // Gmail uses URL-safe Base64
+        base64 = base64.Replace('-', '+').Replace('_', '/');
+
+        // Pad with '=' to make length multiple of 4
+        switch (base64.Length % 4)
+        {
+            case 2: base64 += "=="; break;
+            case 3: base64 += "="; break;
+        }
+
+        try
+        {
+            byte[] data = Convert.FromBase64String(base64);
+            return Encoding.UTF8.GetString(data);
+        }
+        catch (FormatException)
+        {
+            return "[Invalid base64 format]";
+        }
     }
 
     // Helper: Extract date range from subject and check if current date is in range
@@ -375,8 +401,6 @@ public class GmailNotificationConsumer : BackgroundService
         }
         return null;
     }
-
-
 
     private void CleanupConnection()
     {
