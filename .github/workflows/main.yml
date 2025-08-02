@@ -41,6 +41,8 @@ jobs:
 
       - name: Start Tailscale with OAuth
         uses: tailscale/github-action@v2
+        env:
+          TAILSCALE_AUTHKEY: ""
         with:
           oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
