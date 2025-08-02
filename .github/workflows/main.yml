@@ -43,10 +43,9 @@ jobs:
           echo "Tailscale status:"
           tailscale status
 
-      ## add new user for deploying
-      # sudo adduser deployuser
-      # sudo usermod -aG docker deployuser
-      # echo "deployuser ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/deployuser
+      ## Allow passwordless sudo for the GitHub Action user (recommended for CI/CD)
+      # sudo visudo
+      # your-username ALL=(ALL) NOPASSWD:ALL
 
       - name: Debug image name
         run: |
