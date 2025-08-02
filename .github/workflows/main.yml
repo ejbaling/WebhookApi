@@ -39,6 +39,9 @@ jobs:
           docker build -t $DOCKER_IMAGE -f $DOCKER_DIR/Dockerfile $DOCKER_DIR
           docker push $DOCKER_IMAGE
 
+      - name: Debug env
+        run: env | grep TAILSCALE
+
       - name: Start Tailscale with OAuth
         uses: tailscale/github-action@v2
         with:
