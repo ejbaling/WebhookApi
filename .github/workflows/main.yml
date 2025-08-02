@@ -23,6 +23,11 @@ jobs:
 
       - name: Log in to Docker Hub
         run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      - name: Inject appsettings.Production.json from secret
+        run: |
+           mkdir -p $DOCKER_DIR
+           echo "${{ secrets.APPSETTINGS_PROD_JSON }}" > $DOCKER_DIR/appsettings.Production.json
       
       - name: Build and push Docker image
         run: |
