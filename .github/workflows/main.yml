@@ -54,7 +54,8 @@ jobs:
 
       - name: SSH and deploy on server via Tailscale
         run: |
-          ssh -tt -o StrictHostKeyChecking=no $REMOTE_HOST << EOF
+          ssh -o StrictHostKeyChecking=no $REMOTE_HOST << EOF
+            set ex
             sudo docker pull $DOCKER_IMAGE
             cd ~/WebhookApi/WebhookApi
             sudo docker compose down
