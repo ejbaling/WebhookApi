@@ -47,8 +47,7 @@ jobs:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
           #oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
           #oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
-          tags: tag:webhook
-        #  version: 1.66.0
+          tags: tag:ci
 
       - name: Wait for Tailscale to connect
         run: |
