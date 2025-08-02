@@ -26,8 +26,9 @@ jobs:
 
       - name: Inject appsettings.Production.json from secret
         run: |
-           mkdir -p $DOCKER_DIR
-           echo "${{ secrets.APPSETTINGS_PROD_JSON }}" > $DOCKER_DIR/appsettings.Production.json
+          cat <<EOF > $DOCKER_DIR/appsettings.Production.json
+          ${{ secrets.APPSETTINGS_PROD_JSON }}
+          EOF
 
       - name: Validate JSON format
         run: |
