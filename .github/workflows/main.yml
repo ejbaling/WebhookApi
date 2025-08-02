@@ -29,6 +29,10 @@ jobs:
           docker build -t $DOCKER_IMAGE -f $DOCKER_DIR/Dockerfile $DOCKER_DIR
           docker push $DOCKER_IMAGE
 
+      - name: Debug image name
+        run: |
+          echo "Image to deploy: ${{ secrets.TAILSCALE_AUTHKEY }}
+
       - name: Start Tailscale
         uses: tailscale/github-action@v2
         with:
@@ -44,9 +48,13 @@ jobs:
       # sudo usermod -aG docker deployuser
       # echo "deployuser ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/deployuser
 
+      - name: Debug image name
+        run: |
+          echo "Image to deploy: $DOCKER_IMAGE"
+
       - name: SSH and deploy on server via Tailscale
         run: |
-          ssh -tt -o StrictHostKeyChecking=no $REMOTE_HOST << 'EOF'
+          ssh -tt -o StrictHostKeyChecking=no $REMOTE_HOST << EOF
             sudo docker pull $DOCKER_IMAGE
             cd ~/WebhookApi/WebhookApi
             sudo docker compose down
