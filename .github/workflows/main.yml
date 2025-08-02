@@ -39,7 +39,7 @@ jobs:
           echo "Tailscale status:"
           tailscale status
 
-      # add new user for deploying
+      ## add new user for deploying
       # sudo adduser deployuser
       # sudo usermod -aG docker deployuser
       # echo "deployuser ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/deployuser
