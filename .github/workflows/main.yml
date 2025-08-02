@@ -63,10 +63,10 @@ jobs:
         run: |
           echo "Image to deploy: $DOCKER_IMAGE"
 
-      - name: SSH and deploy on server via Tailscale
+      - name: Deploy via SSH
         run: |
           ssh -o StrictHostKeyChecking=no $REMOTE_HOST << 'EOF'
-            set ex
+            set -ex
             sudo docker pull $DOCKER_IMAGE
             cd ~/WebhookApi/WebhookApi
             sudo docker compose down
