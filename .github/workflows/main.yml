@@ -12,6 +12,7 @@ jobs:
     env:
       DOCKER_IMAGE: ${{ secrets.DOCKER_USERNAME }}/webhookapi:latest
       DOCKER_DIR: WebhookApi
+      REMOTE_HOST: ${{ secrets.TAILSCALE_HOST }} # e.g. username@hostname.tailnet-name.ts.net
       
     steps:
       - name: Checkout code
@@ -28,15 +29,22 @@ jobs:
           docker build -t $DOCKER_IMAGE -f $DOCKER_DIR/Dockerfile $DOCKER_DIR
           docker push $DOCKER_IMAGE
 
-      - name: SSH and deploy on server
-        uses: appleboy/ssh-action@v1.0.0
+      - name: Start Tailscale
+        uses: tailscale/github-action@v2
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+
+      - name: Wait for Tailscale to connect
+        run: |
+          echo "Tailscale status:"
+          tailscale status
+
+      - name: SSH and deploy on server via Tailscale
+        run: |
+          ssh -o StrictHostKeyChecking=no $REMOTE_HOST << 'EOF'
             docker pull ${{ secrets.DOCKER_USERNAME }}/webhookapi:latest
             cd ~/WebhookApi/WebhookApi
             docker compose down
             docker compose up -d
             docker system prune -f
+          EOF
