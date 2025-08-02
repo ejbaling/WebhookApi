@@ -43,10 +43,10 @@ jobs:
         run: |
           echo "TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}"
 
-      - name: Start Tailscale
+      - name: Start Tailscale with OAuth token
         uses: tailscale/github-action@v2
         with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          oauth-access-token: ${{ secrets.TAILSCALE_OAUTH_TOKEN }}
 
       - name: Wait for Tailscale to connect
         run: |
