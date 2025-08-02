@@ -39,11 +39,12 @@ jobs:
           docker build -t $DOCKER_IMAGE -f $DOCKER_DIR/Dockerfile $DOCKER_DIR
           docker push $DOCKER_IMAGE
 
-      - name: Start Tailscale with OAuth token
+      - name: Start Tailscale with OAuth
         uses: tailscale/github-action@v2
         with:
           oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
+          version: 1.42.0
 
       - name: Wait for Tailscale to connect
         run: |
