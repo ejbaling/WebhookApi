@@ -39,15 +39,20 @@ jobs:
           docker build -t $DOCKER_IMAGE -f $DOCKER_DIR/Dockerfile $DOCKER_DIR
           docker push $DOCKER_IMAGE
 
-      - name: Start Tailscale with OAuth
-        uses: tailscale/github-action@v2
-        #env:
-        #  TAILSCALE_AUTHKEY: ""
-        with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
-          #oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
-          #oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
-          tags: tag:ci
+      #- name: Start Tailscale with OAuth
+      # uses: tailscale/github-action@v2
+      # #env:
+      # #  TAILSCALE_AUTHKEY: ""
+      # with:
+      #   authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+      #    #oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+      #   #oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
+      #   tags: tag:ci
+
+      - name: Install Tailscale
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+          sudo tailscale up --authkey=${{ secrets.TS_AUTH_KEY }} --advertise-tags=tag:ci --ssh
 
       - name: Wait for Tailscale to connect
         run: |
