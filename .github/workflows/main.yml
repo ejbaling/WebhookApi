@@ -29,9 +29,9 @@ jobs:
           docker build -t $DOCKER_IMAGE -f $DOCKER_DIR/Dockerfile $DOCKER_DIR
           docker push $DOCKER_IMAGE
 
-      - name: Debug image name
+      - name: Debug AUTHKEY
         run: |
-          echo "Image to deploy: ${{ secrets.TAILSCALE_AUTHKEY }}
+          echo "TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}"
 
       - name: Start Tailscale
         uses: tailscale/github-action@v2
