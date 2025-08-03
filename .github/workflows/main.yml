@@ -39,16 +39,13 @@ jobs:
           docker build -t $DOCKER_IMAGE -f $DOCKER_DIR/Dockerfile $DOCKER_DIR
           docker push $DOCKER_IMAGE
 
-      - name: Start Tailscale with OAuth
+      - name: Start Tailscale
         uses: tailscale/github-action@v2
-        #env:
-        #  TAILSCALE_AUTHKEY: ""
-        #with:
-        #  authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          tags: tag:ci
           #oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
           #oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
-       #   tags: tag:ci
-        #  version: 1.66.0
 
       - name: Wait for Tailscale to connect
         run: |
@@ -63,10 +60,10 @@ jobs:
         run: |
           echo "Image to deploy: $DOCKER_IMAGE"
 
-      - name: SSH and deploy on server via Tailscale
+      - name: Deploy via SSH
         run: |
-          ssh -o StrictHostKeyChecking=no $REMOTE_HOST << 'EOF'
-            set ex
+          ssh -o StrictHostKeyChecking=no $REMOTE_HOST << EOF
+            set -ex
             sudo docker pull $DOCKER_IMAGE
             cd ~/WebhookApi/WebhookApi
             sudo docker compose down
