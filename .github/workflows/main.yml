@@ -44,8 +44,6 @@ jobs:
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
           tags: tag:ci
-          #oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
-          #oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
 
       - name: Wait for Tailscale to connect
         run: |
