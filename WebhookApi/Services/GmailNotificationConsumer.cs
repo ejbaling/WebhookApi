@@ -270,7 +270,7 @@ public class GmailNotificationConsumer : BackgroundService
                                                 return;
                                             }
                                             var emailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
-                                            var telegramMessage = $"Subject: {ExtractSubject(subject)}, Message: {emailBody}";
+                                            var telegramMessage = $"{ExtractSubject(subject)}: {emailBody}";
                                             // Replace with your actual chatId and botClient instance
                                             var botClient = new TelegramBotClient(botToken);
                                             await botClient.SendTextMessageAsync(
@@ -340,7 +340,13 @@ public class GmailNotificationConsumer : BackgroundService
         // Step 5: Collapse multiple spaces
         cleanMessage = Regex.Replace(cleanMessage, @"\s{2,}", " ");
 
-        // Step 6: Truncate to maxLength
+        // Step 6: Replace the whole string with room number based on room name.
+        cleanMessage = Regex.Replace(cleanMessage, "Rangiora", "Room 1", RegexOptions.IgnoreCase);
+        cleanMessage = Regex.Replace(cleanMessage, "Rimu", "Room 2", RegexOptions.IgnoreCase);
+        cleanMessage = Regex.Replace(cleanMessage, "Kauri", "Room 3", RegexOptions.IgnoreCase);
+        cleanMessage = Regex.Replace(cleanMessage, "Kowhai", "Room 4", RegexOptions.IgnoreCase);
+
+        // Step 7: Truncate to maxLength
         return cleanMessage.Length <= maxLength
             ? cleanMessage
             : cleanMessage.Substring(0, maxLength - 3) + "...";
