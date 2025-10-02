@@ -314,7 +314,7 @@ public class GmailNotificationConsumer : BackgroundService
 
         // Step 1: Remove email headers (From:, Date:, Subject:, To:)
         string[] headerPrefixes = { "From:", "Date:", "Subject:", "To:" };
-        string[] skipPrefixes = { "Reply", "You can also respond", "<", ".", "[image:"};
+        string[] skipPrefixes = { "Reply", "You can also respond", "<", "." };
 
         var lines = rawMessage.Split(new[] { '\r', '\n' }, StringSplitOptions.None)
             .Select(RemoveInvisibleCharacters)
@@ -325,41 +325,22 @@ public class GmailNotificationConsumer : BackgroundService
                 !skipPrefixes.Any(skip => line.StartsWith(skip, StringComparison.OrdinalIgnoreCase)))
             .ToList();
 
-        var actualGuestLines = new List<string>();
-        var isGuestSection = false;
-
         // Step 2: Remove URLs (optional)
         for (int i = 0; i < lines.Count; i++)
-        {
             lines[i] = Regex.Replace(lines[i], @"https?://[^\s]+", ""); // strip links
-            if (lines[i].Equals("Booker", StringComparison.OrdinalIgnoreCase))
-            {
-                isGuestSection = true;
-                continue;
-            }
+        // Remove empty lines
+        lines = [.. lines.Where(line => !string.IsNullOrWhiteSpace(line))];
 
-            if (isGuestSection)
-            {
-                // Stop if we hit system markers
-                if (lines[i].StartsWith("REDWOOD", StringComparison.OrdinalIgnoreCase) ||
-                    lines[i].StartsWith("Check-in", StringComparison.OrdinalIgnoreCase) ||
-                    lines[i].StartsWith("Guests", StringComparison.OrdinalIgnoreCase) ||
-                    lines[i].StartsWith("Get the app", StringComparison.OrdinalIgnoreCase) ||
-                    lines[i].StartsWith("Airbnb", StringComparison.OrdinalIgnoreCase) ||
-                    lines[i].StartsWith("Update your email preferences", StringComparison.OrdinalIgnoreCase))
-                    break;
+        // Step 3: Remove tags like [image: Airbnb]
+        lines = [.. lines.Where(line => !line.TrimStart().StartsWith("[image:", StringComparison.OrdinalIgnoreCase))];
 
-                actualGuestLines.Add(lines[i]);
-            }
-        }
+        // Step 4: Join cleaned lines
+        string cleanMessage = string.Join("\n", lines);
 
-        // Step 3: Join cleaned lines
-        string cleanMessage = string.Join("\n", actualGuestLines);
-
-        // Step 4: Collapse multiple spaces
+        // Step 5: Collapse multiple spaces
         cleanMessage = Regex.Replace(cleanMessage, @"\s{2,}", " ");
 
-        // Step 5: Truncate to maxLength
+        // Step 6: Truncate to maxLength
         return cleanMessage.Length <= maxLength
             ? cleanMessage
             : cleanMessage.Substring(0, maxLength - 3) + "...";
