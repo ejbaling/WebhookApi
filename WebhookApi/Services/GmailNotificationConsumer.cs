@@ -341,15 +341,28 @@ public class GmailNotificationConsumer : BackgroundService
         cleanMessage = Regex.Replace(cleanMessage, @"\s{2,}", " ");
 
         // Step 6: Replace the whole string with room number based on room name.
-        cleanMessage = Regex.Replace(cleanMessage, "Rangiora", "Room 1", RegexOptions.IgnoreCase);
-        cleanMessage = Regex.Replace(cleanMessage, "Rimu", "Room 2", RegexOptions.IgnoreCase);
-        cleanMessage = Regex.Replace(cleanMessage, "Kauri", "Room 3", RegexOptions.IgnoreCase);
-        cleanMessage = Regex.Replace(cleanMessage, "Kowhai", "Room 4", RegexOptions.IgnoreCase);
+        var mappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "Rangiora", "Room 1" },
+            { "Rimu", "Room 2" },
+            { "Kauri", "Room 3" },
+            { "Kowhai", "Room 4" }
+        };
+
+        string result = cleanMessage;
+        foreach (var kvp in mappings)
+        {
+            if (cleanMessage.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
+            {
+                result = kvp.Value;
+                break; // stop at first match
+            }
+        }
 
         // Step 7: Truncate to maxLength
-        return cleanMessage.Length <= maxLength
-            ? cleanMessage
-            : cleanMessage.Substring(0, maxLength - 3) + "...";
+        return result.Length <= maxLength
+            ? result
+            : result.Substring(0, maxLength - 3) + "...";
     }
 
     private string ExtractMessage(string rawMessage, int maxLength = 160)
