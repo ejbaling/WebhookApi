@@ -269,8 +269,8 @@ public class GmailNotificationConsumer : BackgroundService
                                                 _logger.LogError("Telegram BotToken or chatIc is not configured.");
                                                 return;
                                             }
-                                            var emailBody = message.Payload != null ? ExtractCleanMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
-                                            var telegramMessage = $"Subject: {ExtractCleanMessage(subject)}, Message: {emailBody}";
+                                            var emailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
+                                            var telegramMessage = $"Subject: {ExtractSubject(subject)}, Message: {emailBody}";
                                             // Replace with your actual chatId and botClient instance
                                             var botClient = new TelegramBotClient(botToken);
                                             await botClient.SendTextMessageAsync(
@@ -307,7 +307,7 @@ public class GmailNotificationConsumer : BackgroundService
         }
     }
 
-    private string ExtractCleanMessage(string rawMessage, int maxLength = 160)
+    private string ExtractSubject(string rawMessage, int maxLength = 160)
     {
         if (string.IsNullOrWhiteSpace(rawMessage))
             return string.Empty;
@@ -341,6 +341,64 @@ public class GmailNotificationConsumer : BackgroundService
         cleanMessage = Regex.Replace(cleanMessage, @"\s{2,}", " ");
 
         // Step 6: Truncate to maxLength
+        return cleanMessage.Length <= maxLength
+            ? cleanMessage
+            : cleanMessage.Substring(0, maxLength - 3) + "...";
+    }
+
+    private string ExtractMessage(string rawMessage, int maxLength = 160)
+    {
+        if (string.IsNullOrWhiteSpace(rawMessage))
+            return string.Empty;
+
+        // Step 1: Remove email headers (From:, Date:, Subject:, To:)
+        string[] headerPrefixes = { "From:", "Date:", "Subject:", "To:" };
+        string[] skipPrefixes = { "Reply", "You can also respond", "<", ".", "[image:"};
+
+        var lines = rawMessage.Split(new[] { '\r', '\n' }, StringSplitOptions.None)
+            .Select(RemoveInvisibleCharacters)
+            .Select(line => line.Trim())
+            .Where(line =>
+                !string.IsNullOrWhiteSpace(line) &&
+                !headerPrefixes.Any(prefix => line.StartsWith(prefix)) &&
+                !skipPrefixes.Any(skip => line.StartsWith(skip, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        var actualGuestLines = new List<string>();
+        var isGuestSection = false;
+
+        // Step 2: Remove URLs (optional)
+        for (int i = 0; i < lines.Count; i++)
+        {
+            lines[i] = Regex.Replace(lines[i], @"https?://[^\s]+", ""); // strip links
+            if (lines[i].Equals("Booker", StringComparison.OrdinalIgnoreCase))
+            {
+                isGuestSection = true;
+                continue;
+            }
+
+            if (isGuestSection)
+            {
+                // Stop if we hit system markers
+                if (lines[i].StartsWith("REDWOOD", StringComparison.OrdinalIgnoreCase) ||
+                    lines[i].StartsWith("Check-in", StringComparison.OrdinalIgnoreCase) ||
+                    lines[i].StartsWith("Guests", StringComparison.OrdinalIgnoreCase) ||
+                    lines[i].StartsWith("Get the app", StringComparison.OrdinalIgnoreCase) ||
+                    lines[i].StartsWith("Airbnb", StringComparison.OrdinalIgnoreCase) ||
+                    lines[i].StartsWith("Update your email preferences", StringComparison.OrdinalIgnoreCase))
+                    break;
+
+                actualGuestLines.Add(lines[i]);
+            }
+        }
+
+        // Step 3: Join cleaned lines
+        string cleanMessage = string.Join("\n", actualGuestLines);
+
+        // Step 4: Collapse multiple spaces
+        cleanMessage = Regex.Replace(cleanMessage, @"\s{2,}", " ");
+
+        // Step 5: Truncate to maxLength
         return cleanMessage.Length <= maxLength
             ? cleanMessage
             : cleanMessage.Substring(0, maxLength - 3) + "...";
