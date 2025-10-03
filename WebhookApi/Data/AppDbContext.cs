@@ -1,6 +1,7 @@
 // ... existing code ...
 
 using Microsoft.EntityFrameworkCore;
+using RedwoodIloilo.Common.Entities;
 
 namespace WebhookApi.Data
 {
@@ -15,16 +16,6 @@ namespace WebhookApi.Data
         }
         
         public DbSet<GuestMessage> GuestMessages { get; set; }
-    }
-
-    public class GuestMessage
-    {
-        public int Id { get; set; }
-        public required string Message { get; set; }
-        public string? Language { get; set; }
-        public string? Category { get; set; }
-        public string? Sentiment { get; set; }
-        public string? ReplySuggestion { get; set; }
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DbSet<GuestResponse> GuestResponses { get; set; }
     }
 }

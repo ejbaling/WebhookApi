@@ -12,6 +12,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Telegram.Bot;
 using WebhookApi.Data;
+using RedwoodIloilo.Common.Entities;
 
 namespace WebhookApi.Services;
 
@@ -56,6 +57,7 @@ public class GmailNotificationConsumer : BackgroundService
     private readonly TimeSpan _reconnectDelay = TimeSpan.FromSeconds(5);
     private readonly IConfiguration _configuration;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly HttpClient _httpClient;
 
     // In-memory storage for last processed historyId (development only)
     private static ulong _lastProcessedHistoryId = 0;
@@ -64,12 +66,14 @@ public class GmailNotificationConsumer : BackgroundService
         IConnectionFactory connectionFactory,
         ILogger<GmailNotificationConsumer> logger,
         IConfiguration configuration,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        IHttpClientFactory httpClientFactory)
     {
         _connectionFactory = connectionFactory;
         _logger = logger;
         _configuration = configuration;
         _scopeFactory = scopeFactory;
+        _httpClient = httpClientFactory.CreateClient();
     }
 
     private async Task<bool> TryConnect()
@@ -277,11 +281,22 @@ public class GmailNotificationConsumer : BackgroundService
                                             var telegramMessage = $"{ExtractSubject(subject)}: {emailBody}";
                                             // Replace with your actual chatId and botClient instance
                                             var botClient = new TelegramBotClient(botToken);
-                                            await botClient.SendTextMessageAsync(
-                                                new Telegram.Bot.Types.ChatId(chatId),
-                                                text: telegramMessage,
-                                                cancellationToken: CancellationToken.None);
-                                            _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
+                                            // await botClient.SendTextMessageAsync(
+                                            //     new Telegram.Bot.Types.ChatId(chatId),
+                                            //     text: telegramMessage,
+                                            //     cancellationToken: CancellationToken.None);
+                                            // _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
+
+                                            var request = new
+                                            {
+                                                question = "Can I smoke inside the property?",
+                                                rules = "No smoking inside. You may smoke outside in the garden."
+                                            };
+
+                                            var result = await _httpClient.PostAsJsonAsync("http://100.80.77.91:8000/qa", request);
+                                            string response = string.Empty;
+                                            if (result != null && result.IsSuccessStatusCode == true && result.Content != null)
+                                                response = await result.Content.ReadAsStringAsync();
 
                                             // Save to database
                                             using (var scope = _scopeFactory.CreateScope())
@@ -296,6 +311,17 @@ public class GmailNotificationConsumer : BackgroundService
                                                     ReplySuggestion = null // Placeholder, implement reply suggestion if needed
                                                 };
                                                 dbContext.GuestMessages.Add(guestMessage);
+
+                                                if (!string.IsNullOrWhiteSpace(response))
+                                                {
+                                                    var guestResponse = new GuestResponse
+                                                    {
+                                                        GuestMessageId = guestMessage.Id,
+                                                        Response = response,
+                                                        CreatedAt = DateTime.UtcNow
+                                                    };
+                                                    dbContext.GuestResponses.Add(guestResponse);
+                                                }
                                                 await dbContext.SaveChangesAsync();
                                                 _logger.LogInformation("Saved guest message to database with ID: {Id}", guestMessage.Id);
                                             }
