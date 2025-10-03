@@ -6,6 +6,7 @@ services:
     #  context: .
     #  dockerfile: Dockerfile
     image: emmanueljomer/webhookapi:latest
+    container_name: webhookapi
     ports:
       - "80:80"
       # - "443:443"

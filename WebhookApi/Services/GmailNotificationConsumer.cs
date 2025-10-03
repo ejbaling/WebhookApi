@@ -11,6 +11,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Telegram.Bot;
+using WebhookApi.Data;
 
 namespace WebhookApi.Services;
 
@@ -54,6 +55,7 @@ public class GmailNotificationConsumer : BackgroundService
     private readonly int _maxRetryAttempts = 10;
     private readonly TimeSpan _reconnectDelay = TimeSpan.FromSeconds(5);
     private readonly IConfiguration _configuration;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     // In-memory storage for last processed historyId (development only)
     private static ulong _lastProcessedHistoryId = 0;
@@ -61,11 +63,13 @@ public class GmailNotificationConsumer : BackgroundService
     public GmailNotificationConsumer(
         IConnectionFactory connectionFactory,
         ILogger<GmailNotificationConsumer> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IServiceScopeFactory scopeFactory)
     {
         _connectionFactory = connectionFactory;
         _logger = logger;
         _configuration = configuration;
+        _scopeFactory = scopeFactory;
     }
 
     private async Task<bool> TryConnect()
@@ -278,6 +282,23 @@ public class GmailNotificationConsumer : BackgroundService
                                                 text: telegramMessage,
                                                 cancellationToken: CancellationToken.None);
                                             _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
+
+                                            // Save to database
+                                            using (var scope = _scopeFactory.CreateScope())
+                                            {
+                                                var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                                                var guestMessage = new GuestMessage
+                                                {
+                                                    Message = emailBody,
+                                                    Language = "en", // Placeholder, implement language detection if needed
+                                                    Category = "reservation", // Placeholder, implement category detection if needed
+                                                    Sentiment = "neutral", // Placeholder, implement sentiment analysis if needed
+                                                    ReplySuggestion = null // Placeholder, implement reply suggestion if needed
+                                                };
+                                                dbContext.GuestMessages.Add(guestMessage);
+                                                await dbContext.SaveChangesAsync();
+                                                _logger.LogInformation("Saved guest message to database with ID: {Id}", guestMessage.Id);
+                                            }
                                         }
                                     }
                                 }

@@ -3,6 +3,8 @@ using System.Text.Json;
 using RabbitMQ.Client;
 using Telegram.Bot;
 using WebhookApi.Services;
+using WebhookApi.Data;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +23,9 @@ builder.Services.AddHostedService<WebhookApi.Services.TelegramReceiverService>()
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
 var app = builder.Build();
 
