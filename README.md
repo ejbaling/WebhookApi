@@ -1,0 +1,1 @@
+- `appsettings.Production.json` is the same as `appsettings.Development.json`
