@@ -276,12 +276,12 @@ public class GmailNotificationConsumer : BackgroundService
                                             var emailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
                                             var telegramMessage = $"{ExtractSubject(subject)}: {emailBody}";
                                             // Replace with your actual chatId and botClient instance
-                                            // var botClient = new TelegramBotClient(botToken);
-                                            // await botClient.SendTextMessageAsync(
-                                            //     new Telegram.Bot.Types.ChatId(chatId),
-                                            //     text: telegramMessage,
-                                            //     cancellationToken: CancellationToken.None);
-                                            // _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
+                                            var botClient = new TelegramBotClient(botToken);
+                                            await botClient.SendTextMessageAsync(
+                                                new Telegram.Bot.Types.ChatId(chatId),
+                                                text: telegramMessage,
+                                                cancellationToken: CancellationToken.None);
+                                            _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
 
                                             // Save to database
                                             using (var scope = _scopeFactory.CreateScope())
