@@ -275,8 +275,8 @@ public class GmailNotificationConsumer : BackgroundService
 
                                             var request = new
                                             {
-                                                question = "Can I smoke inside the property?",
-                                                rules = "No smoking inside. You may smoke outside in the garden."
+                                                question = emailBody,
+                                                rules = HouseRules.RulesJson
                                             };
 
                                             var result = await _httpClient.PostAsJsonAsync("http://100.80.77.91:8000/qa", request);
