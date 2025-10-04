@@ -13,6 +13,7 @@ using System.Text.RegularExpressions;
 using Telegram.Bot;
 using WebhookApi.Data;
 using RedwoodIloilo.Common.Entities;
+using RedwoodIloilo.Common.Models;
 
 namespace WebhookApi.Services;
 
@@ -314,10 +315,11 @@ public class GmailNotificationConsumer : BackgroundService
 
                                                 if (!string.IsNullOrWhiteSpace(response))
                                                 {
+                                                    var qaResponse = JsonSerializer.Deserialize<QaResponse>(response);
                                                     var guestResponse = new GuestResponse
                                                     {
                                                         GuestMessage = guestMessage,
-                                                        Response = response,
+                                                        Response = qaResponse?.Response ?? "Sorry, no response from AI.",
                                                         CreatedAt = DateTime.UtcNow
                                                     };
                                                     dbContext.GuestResponses.Add(guestResponse);
