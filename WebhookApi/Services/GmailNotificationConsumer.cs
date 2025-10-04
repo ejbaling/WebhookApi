@@ -315,7 +315,10 @@ public class GmailNotificationConsumer : BackgroundService
 
                                                 if (!string.IsNullOrWhiteSpace(response))
                                                 {
-                                                    var qaResponse = JsonSerializer.Deserialize<QaResponse>(response);
+                                                    var qaResponse = JsonSerializer.Deserialize<QaResponse>(response, new JsonSerializerOptions
+                                                    {
+                                                        PropertyNameCaseInsensitive = true
+                                                    });
                                                     var guestResponse = new GuestResponse
                                                     {
                                                         GuestMessage = guestMessage,
