@@ -316,7 +316,7 @@ public class GmailNotificationConsumer : BackgroundService
                                                 {
                                                     var guestResponse = new GuestResponse
                                                     {
-                                                        GuestMessageId = guestMessage.Id,
+                                                        GuestMessage = guestMessage,
                                                         Response = response,
                                                         CreatedAt = DateTime.UtcNow
                                                     };
