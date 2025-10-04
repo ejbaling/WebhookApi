@@ -319,7 +319,7 @@ public class GmailNotificationConsumer : BackgroundService
                                                     var guestResponse = new GuestResponse
                                                     {
                                                         GuestMessage = guestMessage,
-                                                        Response = qaResponse?.Response ?? "Sorry, no response from AI.",
+                                                        Response = qaResponse?.Answer ?? "Sorry, no response from AI.",
                                                         CreatedAt = DateTime.UtcNow
                                                     };
                                                     dbContext.GuestResponses.Add(guestResponse);
