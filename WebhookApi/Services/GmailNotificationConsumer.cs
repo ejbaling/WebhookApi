@@ -14,6 +14,8 @@ using Telegram.Bot;
 using WebhookApi.Data;
 using RedwoodIloilo.Common.Entities;
 using RedwoodIloilo.Common.Models;
+using Microsoft.EntityFrameworkCore;
+
 
 namespace WebhookApi.Services;
 
@@ -273,52 +275,62 @@ public class GmailNotificationConsumer : BackgroundService
                                             
                                             var emailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
 
-                                            var request = new
+                                            Config? aiConfig = null;
+                                            using (var scope = _scopeFactory.CreateScope()) 
                                             {
-                                                question = emailBody,
-                                                rules = HouseRules.RulesJson
-                                            };
-
-                                            var result = await _httpClient.PostAsJsonAsync("http://100.80.77.91:8000/qa", request);
-                                            string response = string.Empty;
-                                            if (result != null && result.IsSuccessStatusCode == true && result.Content != null)
-                                                response = await result.Content.ReadAsStringAsync();
+                                                var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                                                aiConfig = await dbContext.Configs.FirstOrDefaultAsync(c => c.Key == "AiEnabled");
+                                            }
 
                                             QaResponse? qaResponse = null;
-                                            if (!string.IsNullOrWhiteSpace(response))
+                                            if (aiConfig?.Value == true)
                                             {
-                                                qaResponse = JsonSerializer.Deserialize<QaResponse>(response, new JsonSerializerOptions
+                                                var request = new
                                                 {
-                                                    PropertyNameCaseInsensitive = true
-                                                });
+                                                    question = emailBody,
+                                                    rules = HouseRules.RulesJson
+                                                };
+
+                                                var result = await _httpClient.PostAsJsonAsync("http://100.80.77.91:8000/qa", request);
+                                                string response = string.Empty;
+                                                if (result != null && result.IsSuccessStatusCode == true && result.Content != null)
+                                                    response = await result.Content.ReadAsStringAsync();
+
+                                                if (!string.IsNullOrWhiteSpace(response))
+                                                {
+                                                    qaResponse = JsonSerializer.Deserialize<QaResponse>(response, new JsonSerializerOptions
+                                                    {
+                                                        PropertyNameCaseInsensitive = true
+                                                    });
+                                                }
                                             }
 
                                             // Save to database
-                                            using (var scope = _scopeFactory.CreateScope())
-                                            {
-                                                var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                                                var guestMessage = new GuestMessage
+                                                using (var scope = _scopeFactory.CreateScope())
                                                 {
-                                                    Message = emailBody,
-                                                    Language = "en", // Placeholder, implement language detection if needed
-                                                    Category = "reservation", // Placeholder, implement category detection if needed
-                                                    Sentiment = "neutral", // Placeholder, implement sentiment analysis if needed
-                                                    ReplySuggestion = null // Placeholder, implement reply suggestion if needed
-                                                };
-                                                dbContext.GuestMessages.Add(guestMessage);
+                                                    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                                                    var guestMessage = new GuestMessage
+                                                    {
+                                                        Message = emailBody,
+                                                        Language = "en", // Placeholder, implement language detection if needed
+                                                        Category = "reservation", // Placeholder, implement category detection if needed
+                                                        Sentiment = "neutral", // Placeholder, implement sentiment analysis if needed
+                                                        ReplySuggestion = null // Placeholder, implement reply suggestion if needed
+                                                    };
+                                                    dbContext.GuestMessages.Add(guestMessage);
 
-                                                var guestResponse = new GuestResponse
-                                                {
-                                                    GuestMessage = guestMessage,
-                                                    Response = qaResponse?.Answer ?? "Sorry, no response from AI.",
-                                                    CreatedAt = DateTime.UtcNow
-                                                };
-                                                dbContext.GuestResponses.Add(guestResponse);
+                                                    var guestResponse = new GuestResponse
+                                                    {
+                                                        GuestMessage = guestMessage,
+                                                        Response = qaResponse?.Answer ?? "Sorry, no response from AI.",
+                                                        CreatedAt = DateTime.UtcNow
+                                                    };
+                                                    dbContext.GuestResponses.Add(guestResponse);
 
-                                                await dbContext.SaveChangesAsync();
-                                                
-                                                _logger.LogInformation("Saved guest message to database with ID: {Id}", guestMessage.Id);
-                                            }
+                                                    await dbContext.SaveChangesAsync();
+
+                                                    _logger.LogInformation("Saved guest message to database with ID: {Id}", guestMessage.Id);
+                                                }
 
                                             // Forward to Telegram
                                             var botToken = _configuration["Telegram:BotToken"];

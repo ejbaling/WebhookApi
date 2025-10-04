@@ -17,5 +17,6 @@ namespace WebhookApi.Data
         
         public DbSet<GuestMessage> GuestMessages { get; set; }
         public DbSet<GuestResponse> GuestResponses { get; set; }
+        public DbSet<Config> Configs { get; set; }
     }
 }
