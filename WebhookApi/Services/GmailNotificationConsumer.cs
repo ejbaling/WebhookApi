@@ -279,7 +279,7 @@ public class GmailNotificationConsumer : BackgroundService
                                                 rules = HouseRules.RulesJson
                                             };
 
-                                            var result = await _httpClient.PostAsJsonAsync("http://10.0.0.106:8000/qa", request);
+                                            var result = await _httpClient.PostAsJsonAsync("http://100.80.77.91:8000/qa", request);
                                             string response = string.Empty;
                                             if (result != null && result.IsSuccessStatusCode == true && result.Content != null)
                                                 response = await result.Content.ReadAsStringAsync();
