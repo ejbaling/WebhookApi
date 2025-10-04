@@ -284,6 +284,15 @@ public class GmailNotificationConsumer : BackgroundService
                                             if (result != null && result.IsSuccessStatusCode == true && result.Content != null)
                                                 response = await result.Content.ReadAsStringAsync();
 
+                                            QaResponse? qaResponse = null;
+                                            if (!string.IsNullOrWhiteSpace(response))
+                                            {
+                                                qaResponse = JsonSerializer.Deserialize<QaResponse>(response, new JsonSerializerOptions
+                                                {
+                                                    PropertyNameCaseInsensitive = true
+                                                });
+                                            }
+
                                             // Save to database
                                             using (var scope = _scopeFactory.CreateScope())
                                             {
@@ -298,21 +307,16 @@ public class GmailNotificationConsumer : BackgroundService
                                                 };
                                                 dbContext.GuestMessages.Add(guestMessage);
 
-                                                if (!string.IsNullOrWhiteSpace(response))
+                                                var guestResponse = new GuestResponse
                                                 {
-                                                    var qaResponse = JsonSerializer.Deserialize<QaResponse>(response, new JsonSerializerOptions
-                                                    {
-                                                        PropertyNameCaseInsensitive = true
-                                                    });
-                                                    var guestResponse = new GuestResponse
-                                                    {
-                                                        GuestMessage = guestMessage,
-                                                        Response = qaResponse?.Answer ?? "Sorry, no response from AI.",
-                                                        CreatedAt = DateTime.UtcNow
-                                                    };
-                                                    dbContext.GuestResponses.Add(guestResponse);
-                                                }
+                                                    GuestMessage = guestMessage,
+                                                    Response = qaResponse?.Answer ?? "Sorry, no response from AI.",
+                                                    CreatedAt = DateTime.UtcNow
+                                                };
+                                                dbContext.GuestResponses.Add(guestResponse);
+
                                                 await dbContext.SaveChangesAsync();
+                                                
                                                 _logger.LogInformation("Saved guest message to database with ID: {Id}", guestMessage.Id);
                                             }
 
@@ -332,6 +336,12 @@ public class GmailNotificationConsumer : BackgroundService
                                                 new Telegram.Bot.Types.ChatId(chatId),
                                                 text: telegramMessage,
                                                 cancellationToken: CancellationToken.None);
+
+                                            await botClient.SendTextMessageAsync(
+                                                new Telegram.Bot.Types.ChatId("@redwoodiloiloskycast"),
+                                                text: qaResponse?.Answer ?? "Sorry, no response from AI.",
+                                                cancellationToken: CancellationToken.None);
+
                                             _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
                                         }
                                     }
