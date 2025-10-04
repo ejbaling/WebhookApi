@@ -269,24 +269,9 @@ public class GmailNotificationConsumer : BackgroundService
                                         _logger.LogInformation("Current date is {Status} the reservation range.", isInRange.Value ? "within" : "outside");
                                         if (isInRange.Value)
                                         {
-                                            // Forward to Telegram if in range
-                                            // Send message to Telegram
-                                            var botToken = _configuration["Telegram:BotToken"];
-                                            var chatId = _configuration["Telegram:ChatId"]; // Your personal Telegram user ID
-                                            if (string.IsNullOrWhiteSpace(botToken) || string.IsNullOrWhiteSpace(chatId))
-                                            {
-                                                _logger.LogError("Telegram BotToken or chatIc is not configured.");
-                                                return;
-                                            }
+                                            // Save to db and forward to Telegram if in range
+                                            
                                             var emailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
-                                            var telegramMessage = $"{ExtractSubject(subject)}: {emailBody}";
-                                            // Replace with your actual chatId and botClient instance
-                                            var botClient = new TelegramBotClient(botToken);
-                                            // await botClient.SendTextMessageAsync(
-                                            //     new Telegram.Bot.Types.ChatId(chatId),
-                                            //     text: telegramMessage,
-                                            //     cancellationToken: CancellationToken.None);
-                                            // _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
 
                                             var request = new
                                             {
@@ -330,6 +315,24 @@ public class GmailNotificationConsumer : BackgroundService
                                                 await dbContext.SaveChangesAsync();
                                                 _logger.LogInformation("Saved guest message to database with ID: {Id}", guestMessage.Id);
                                             }
+
+                                            // Forward to Telegram
+                                            var botToken = _configuration["Telegram:BotToken"];
+                                            var chatId = _configuration["Telegram:ChatId"]; // Your personal Telegram user ID
+                                            if (string.IsNullOrWhiteSpace(botToken) || string.IsNullOrWhiteSpace(chatId))
+                                            {
+                                                _logger.LogError("Telegram BotToken or chatIc is not configured.");
+                                                return;
+                                            }
+                                            
+                                            var telegramMessage = $"{ExtractSubject(subject)}: {emailBody}";
+                                            // Replace with your actual chatId and botClient instance
+                                            var botClient = new TelegramBotClient(botToken);
+                                            await botClient.SendTextMessageAsync(
+                                                new Telegram.Bot.Types.ChatId(chatId),
+                                                text: telegramMessage,
+                                                cancellationToken: CancellationToken.None);
+                                            _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
                                         }
                                     }
                                 }
