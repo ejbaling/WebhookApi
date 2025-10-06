@@ -90,7 +90,7 @@ public class RuleRepository : IRuleRepository
             },
 
             { "Amenities", new[] 
-                { "laundry", "washing", "machine", "dryer", "parking", "pool", "gym", "wifi", "internet", "tv", "kettle", "iron", "hair dryer" } 
+                { "laundry", "washing machine", "washing", "machine", "dryer", "parking", "pool", "gym", "wifi", "internet", "tv", "kettle", "iron", "hair dryer" } 
             },
 
             { "Security and Safety", new[] 
