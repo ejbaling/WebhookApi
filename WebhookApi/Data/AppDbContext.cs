@@ -14,9 +14,11 @@ namespace WebhookApi.Data
         {
             _configuration = configuration;
         }
-        
+
         public DbSet<GuestMessage> GuestMessages { get; set; }
         public DbSet<GuestResponse> GuestResponses { get; set; }
         public DbSet<Config> Configs { get; set; }
+        public DbSet<Rule> Rules { get; set; }
+        public DbSet<RuleCategory> RuleCategories { get; set; }
     }
 }

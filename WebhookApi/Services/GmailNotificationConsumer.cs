@@ -16,7 +16,6 @@ using RedwoodIloilo.Common.Entities;
 using RedwoodIloilo.Common.Models;
 using Microsoft.EntityFrameworkCore;
 
-
 namespace WebhookApi.Services;
 
 public class GmailMessageData
@@ -61,6 +60,7 @@ public class GmailNotificationConsumer : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly HttpClient _httpClient;
+    private readonly IRuleRepository _ruleRepository;
 
     // In-memory storage for last processed historyId (development only)
     private static ulong _lastProcessedHistoryId = 0;
@@ -70,13 +70,15 @@ public class GmailNotificationConsumer : BackgroundService
         ILogger<GmailNotificationConsumer> logger,
         IConfiguration configuration,
         IServiceScopeFactory scopeFactory,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        IRuleRepository ruleRepository)
     {
         _connectionFactory = connectionFactory;
         _logger = logger;
         _configuration = configuration;
         _scopeFactory = scopeFactory;
         _httpClient = httpClientFactory.CreateClient();
+        _ruleRepository = ruleRepository;
     }
 
     private async Task<bool> TryConnect()
@@ -285,6 +287,24 @@ public class GmailNotificationConsumer : BackgroundService
                                             QaResponse? qaResponse = null;
                                             if (aiConfig?.Value == true)
                                             {
+                                                // Fetch relevant rules from DB first
+                                                var relevantRules = await _ruleRepository.GetRelevantRulesAsync(emailBody);
+
+                                                var rulesData = relevantRules.Select(r => new
+                                                {
+                                                    category = r.RuleCategory.Name,
+                                                    text = r.RuleText
+                                                });
+
+                                                // Serialize rules to JSON string
+                                                string rulesJson = JsonSerializer.Serialize(rulesData);
+
+                                                // Use HouseRules.RulesJson if no relevant rules found
+                                                if (rulesJson == "[]")
+                                                {
+                                                    rulesJson = HouseRules.RulesJson;
+                                                }
+
                                                 var request = new
                                                 {
                                                     question = emailBody,

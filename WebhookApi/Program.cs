@@ -5,6 +5,7 @@ using Telegram.Bot;
 using WebhookApi.Services;
 using WebhookApi.Data;
 using Microsoft.EntityFrameworkCore;
+using RedwoodIloilo.Common.Entities;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +27,8 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
+
+builder.Services.AddScoped<IRuleRepository, RuleRepository>();
 
 // Add HttpClient support
 builder.Services.AddHttpClient();
