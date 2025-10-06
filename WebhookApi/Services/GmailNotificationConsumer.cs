@@ -290,21 +290,28 @@ public class GmailNotificationConsumer : BackgroundService
                                                 // Fetch relevant rules from DB first
                                                 var relevantRules = await _ruleRepository.GetRelevantRulesAsync(emailBody);
 
-                                                var rulesData = relevantRules.Select(r => new
+                                                // Group by category
+                                                var rulesData = relevantRules
+                                                    .GroupBy(r => r.RuleCategory.Name)
+                                                    .Select(g => new
+                                                    {
+                                                        category = g.Key,
+                                                        rules = g.Select(r => r.RuleText).ToList()
+                                                    })
+                                                    .ToList();
+
+                                                // Check if rules are empty and use fallback if needed
+                                                string rulesJson;
+                                                if (rulesData.Any())
                                                 {
-                                                    category = r.RuleCategory.Name,
-                                                    text = r.RuleText
-                                                });
+                                                    var rulesObject = new { rules = rulesData };
+                                                    rulesJson = JsonSerializer.Serialize(rulesObject);
+                                                    _logger.LogInformation("############################rulesJson: {rulesJson}", rulesJson);
 
-                                                // Serialize rules to JSON string
-                                                string rulesJson = JsonSerializer.Serialize(rulesData);
-
-                                                _logger.LogInformation("############################rulesJson: {rulesJson}", rulesJson);
-
-                                                // Use HouseRules.RulesJson if no relevant rules found
-                                                if (rulesJson == "[]")
+                                                }
+                                                else
                                                 {
-                                                    rulesJson = HouseRules.RulesJson;
+                                                    rulesJson = HouseRules.RulesJson; // Fallback
                                                 }
 
                                                 var request = new
