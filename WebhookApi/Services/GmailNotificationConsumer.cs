@@ -299,7 +299,7 @@ public class GmailNotificationConsumer : BackgroundService
                                                 // Serialize rules to JSON string
                                                 string rulesJson = JsonSerializer.Serialize(rulesData);
 
-                                                _logger.LogInformation("rulesJson: {rulesJson}", rulesJson);
+                                                _logger.LogInformation("############################rulesJson: {rulesJson}", rulesJson);
 
                                                 // Use HouseRules.RulesJson if no relevant rules found
                                                 if (rulesJson == "[]")
