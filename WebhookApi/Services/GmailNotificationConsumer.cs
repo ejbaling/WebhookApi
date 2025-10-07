@@ -60,7 +60,6 @@ public class GmailNotificationConsumer : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly HttpClient _httpClient;
-    private readonly IRuleRepository _ruleRepository;
 
     // In-memory storage for last processed historyId (development only)
     private static ulong _lastProcessedHistoryId = 0;
@@ -70,15 +69,13 @@ public class GmailNotificationConsumer : BackgroundService
         ILogger<GmailNotificationConsumer> logger,
         IConfiguration configuration,
         IServiceScopeFactory scopeFactory,
-        IHttpClientFactory httpClientFactory,
-        IRuleRepository ruleRepository)
+        IHttpClientFactory httpClientFactory)
     {
         _connectionFactory = connectionFactory;
         _logger = logger;
         _configuration = configuration;
         _scopeFactory = scopeFactory;
         _httpClient = httpClientFactory.CreateClient();
-        _ruleRepository = ruleRepository;
     }
 
     private async Task<bool> TryConnect()
@@ -288,7 +285,12 @@ public class GmailNotificationConsumer : BackgroundService
                                             if (aiConfig?.Value == true)
                                             {
                                                 // Fetch relevant rules from DB first
-                                                var relevantRules = await _ruleRepository.GetRelevantRulesAsync(emailBody);
+                                                List<Rule> relevantRules;
+                                                using (var scope = _scopeFactory.CreateScope())
+                                                {
+                                                    var ruleRepository = scope.ServiceProvider.GetRequiredService<IRuleRepository>();
+                                                    relevantRules = await ruleRepository.GetRelevantRulesAsync(emailBody);
+                                                }
 
                                                 // Group by category
                                                 var rulesData = relevantRules
