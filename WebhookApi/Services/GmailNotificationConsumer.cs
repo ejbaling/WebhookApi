@@ -106,6 +106,12 @@ public class GmailNotificationConsumer : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (bool.TryParse(_configuration["GmailNotification:Disabled"], out var isDisabled) && isDisabled)
+        {
+            _logger.LogInformation("Gmail notification consumer is disabled via configuration.");
+            return;
+        }
+
         var retryCount = 0;
         while (!stoppingToken.IsCancellationRequested && retryCount < _maxRetryAttempts)
         {
@@ -337,31 +343,31 @@ public class GmailNotificationConsumer : BackgroundService
                                             }
 
                                             // Save to database
-                                                using (var scope = _scopeFactory.CreateScope())
+                                            using (var scope = _scopeFactory.CreateScope())
+                                            {
+                                                var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                                                var guestMessage = new GuestMessage
                                                 {
-                                                    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                                                    var guestMessage = new GuestMessage
-                                                    {
-                                                        Message = emailBody,
-                                                        Language = "en", // Placeholder, implement language detection if needed
-                                                        Category = "reservation", // Placeholder, implement category detection if needed
-                                                        Sentiment = "neutral", // Placeholder, implement sentiment analysis if needed
-                                                        ReplySuggestion = null // Placeholder, implement reply suggestion if needed
-                                                    };
-                                                    dbContext.GuestMessages.Add(guestMessage);
+                                                    Message = emailBody,
+                                                    Language = "en", // Placeholder, implement language detection if needed
+                                                    Category = "reservation", // Placeholder, implement category detection if needed
+                                                    Sentiment = "neutral", // Placeholder, implement sentiment analysis if needed
+                                                    ReplySuggestion = null // Placeholder, implement reply suggestion if needed
+                                                };
+                                                dbContext.GuestMessages.Add(guestMessage);
 
-                                                    var guestResponse = new GuestResponse
-                                                    {
-                                                        GuestMessage = guestMessage,
-                                                        Response = qaResponse?.Answer ?? "Sorry, no response from AI.",
-                                                        CreatedAt = DateTime.UtcNow
-                                                    };
-                                                    dbContext.GuestResponses.Add(guestResponse);
+                                                var guestResponse = new GuestResponse
+                                                {
+                                                    GuestMessage = guestMessage,
+                                                    Response = qaResponse?.Answer ?? "Sorry, no response from AI.",
+                                                    CreatedAt = DateTime.UtcNow
+                                                };
+                                                dbContext.GuestResponses.Add(guestResponse);
 
-                                                    await dbContext.SaveChangesAsync();
+                                                await dbContext.SaveChangesAsync();
 
-                                                    _logger.LogInformation("Saved guest message to database with ID: {Id}", guestMessage.Id);
-                                                }
+                                                _logger.LogInformation("Saved guest message to database with ID: {Id}", guestMessage.Id);
+                                            }
 
                                             // Forward to Telegram
                                             var botToken = _configuration["Telegram:BotToken"];

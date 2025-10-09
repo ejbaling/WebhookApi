@@ -37,6 +37,9 @@ public class RuleRepository : IRuleRepository
 
     public async Task<List<Rule>> GetRelevantRulesAsync(string question)
     {
+        if (string.IsNullOrWhiteSpace(question))
+            return new List<Rule>();
+            
         question = question.ToLower();
 
         var categoryKeywords = new Dictionary<string, string[]>
