@@ -49,7 +49,7 @@ public class RuleRepository : IRuleRepository
             },
 
             { "Check-in/Check-out", new[] 
-                { "check-in", "check in", "check-out", "check out", "arrival", "departure", "early check-in", "late check-out", "time", "when can we arrive", "when can we leave" } 
+                { "check-in", "check in", "check-out", "check out", "arrival", "departure", "late check-out", "time", "when can we arrive", "when can we leave" } 
             },
 
             { "Electricity & Early/Late Stay Policy", new[] 
