@@ -94,7 +94,12 @@ public class RuleRepository : IRuleRepository
             },
 
             { "Amenities", new[]
-                { "laundry", "washing machine", "washing", "machine", "dryer", "parking", "pool", "gym", "wifi", "internet", "tv", "kettle", "iron", "hair dryer" }
+                // { "laundry", "washing machine", "washing", "machine", "dryer", "parking", "pool", "gym", "wifi", "internet", "tv", "kettle", "iron", "hair dryer" }
+                { "parking", "pool", "gym", "wifi", "internet", "tv", "kettle", "hair dryer" }
+            },
+
+            { "Laundry", new[]
+                { "laundry", "washing machine", "washing", "machine", "dryer", "clothe", "iron", "detergent", "laundromat", "plantsa", "iron board" }
             },
 
             { "Security and Safety", new[]
@@ -102,7 +107,7 @@ public class RuleRepository : IRuleRepository
             },
 
             { "Check-out", new[]
-                { "lock", "key", "door", "leave", "checkout", "check-out", "check out", "gate" }
+                { "lock", "key", "door", "leave", "checkout", "check-out", "check out", "gate", "close" }
             },
 
             { "Lost Items", new[]
@@ -127,16 +132,22 @@ public class RuleRepository : IRuleRepository
         };
 
 
-        string? matchedCategory = categoryKeywords
-            .FirstOrDefault(kvp => kvp.Value.Any(keyword => question.Contains(keyword)))
-            .Key;
+         // 🔍 Find all matching categories
+        var matchedCategories = categoryKeywords
+            .Where(kvp => kvp.Value.Any(keyword => question.Contains(keyword)))
+            .Select(kvp => kvp.Key)
+            .ToList();
 
         IQueryable<Rule> query = _context.Rules.Include(r => r.RuleCategory);
 
-        if (!string.IsNullOrEmpty(matchedCategory))
-            query = query.Where(r => r.RuleCategory.Name == matchedCategory);
+        if (matchedCategories.Any())
+        {
+            query = query.Where(r => matchedCategories.Contains(r.RuleCategory.Name));
+        }
         else
-            query = query.Take(0); // fallback: limit
+        {
+            query = query.Take(0); // no matches
+        }
 
         return await query.ToListAsync();
     }
