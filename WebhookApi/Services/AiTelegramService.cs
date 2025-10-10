@@ -86,11 +86,6 @@ namespace WebhookApi.Services
                     relevantRules = await ruleRepository.GetRelevantRulesAsync(message?.Text ?? string.Empty);
                 }
                 
-                foreach (var rule in relevantRules)
-                {
-                    _logger.LogInformation("############################Relevant Rule: {Category} - {RuleText}", rule.RuleCategory.Name, rule.RuleText);
-                }
-
                 // Group by category
                 var rulesData = relevantRules
                     .GroupBy(r => r.RuleCategory.Name)
