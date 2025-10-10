@@ -85,6 +85,11 @@ namespace WebhookApi.Services
                     var ruleRepository = scope.ServiceProvider.GetRequiredService<IRuleRepository>();
                     relevantRules = await ruleRepository.GetRelevantRulesAsync(message?.Text ?? string.Empty);
                 }
+                
+                foreach (var rule in relevantRules)
+                {
+                    _logger.LogInformation("############################Relevant Rule: {Category} - {RuleText}", rule.RuleCategory.Name, rule.RuleText);
+                }
 
                 // Group by category
                 var rulesData = relevantRules

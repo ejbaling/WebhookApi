@@ -44,76 +44,85 @@ public class RuleRepository : IRuleRepository
 
         var categoryKeywords = new Dictionary<string, string[]>
         {
-            { "Suitability", new[] 
-                { "children", "kids", "baby", "infant", "child", "family", "elderly", "wheelchair", "accessible", "handicap" } 
+            { "Suitability", new[]
+                { "children", "kids", "baby", "infant", "child", "family", "elderly", "wheelchair", "accessible", "handicap" }
             },
 
-            { "Check-in/Check-out", new[] 
-                { "check-in", "check in", "check-out", "check out", "arrival", "departure", "late check-out", "time", "when can we arrive", "when can we leave" } 
+            { "Check-in/Check-out", new[]
+                // { "check-in", "check in", "check-out", "check out", "arrival", "departure", "late check-out", "time", "when can we arrive", "when can we leave" }
+                { "check-in", "check in", "arrival", "time", "when can we arrive" }
             },
 
-            { "Electricity & Early/Late Stay Policy", new[] 
-                { "electricity", "power", "lights", "energy", "aircon", "air conditioning", "fan", "appliance", "early check-in", "late check-out", "stay longer" } 
+            { "Electricity & Early/Late Stay Policy", new[]
+                { "electricity", "power", "lights", "energy", "aircon", "air conditioning", "fan", "appliance", "early check-in", "late check-out", "stay longer" }
             },
 
-            { "Smoking", new[] 
-                { "smoking", "smoke", "cigarette", "vape", "e-cigarette", "ashtray", "smoke outside", "smoking area" } 
+            { "Smoking", new[]
+                { "smoking", "smoke", "cigarette", "vape", "e-cigarette", "ashtray", "smoke outside", "smoking area" }
             },
 
-            { "Pets", new[] 
-                { "pet", "dog", "cat", "animal", "bring my pet", "pet friendly", "pets allowed" } 
+            { "Pets", new[]
+                { "pet", "dog", "cat", "animal", "bring my pet", "pet friendly", "pets allowed" }
             },
 
-            { "Quiet Hours", new[] 
-                { "quiet", "noise", "music", "loud", "party noise", "neighbors", "silence", "sound", "volume" } 
+            { "Quiet Hours", new[]
+                { "quiet", "noise", "music", "loud", "party noise", "neighbors", "silence", "sound", "volume" }
             },
 
-            { "Parties and Events", new[] 
-                { "party", "event", "celebration", "birthday", "gathering", "get together", "wedding", "reception" } 
+            { "Parties and Events", new[]
+                { "party", "event", "celebration", "birthday", "gathering", "get together", "wedding", "reception" }
             },
 
-            { "Maximum Occupancy", new[] 
-                { "maximum guests", "how many people", "occupancy", "extra guest", "more guests", "additional person", "visitor staying", "guest limit" } 
+            { "Maximum Occupancy", new[]
+                { "maximum guests", "how many people", "occupancy", "extra guest", "more guests", "additional person", "visitor staying", "guest limit" }
             },
 
-            { "Visitors", new[] 
-                { "visitor", "guest", "friend", "family visit", "outside guest", "invite someone", "day visitor" } 
+            { "Visitors", new[]
+                { "visitor", "guest", "friend", "family visit", "outside guest", "invite someone", "day visitor" }
             },
 
-            { "Damages", new[] 
-                { "damage", "broken", "repair", "lost", "accident", "deposit", "security deposit", "responsible", "compensation" } 
+            { "Damages", new[]
+                { "damage", "broken", "repair", "lost", "accident", "deposit", "security deposit", "responsible", "compensation" }
             },
 
-            { "Kitchen Use", new[] 
-                { "kitchen", "cook", "cooking", "stove", "microwave", "fridge", "utensil", "pan", "food", "meal", "oven", "dish" } 
+            { "Kitchen Use", new[]
+                { "kitchen", "cook", "cooking", "stove", "microwave", "fridge", "utensil", "pan", "food", "meal", "oven", "dish" }
             },
 
-            { "Garbage and Recycling", new[] 
-                { "trash", "garbage", "waste", "rubbish", "bin", "recycle", "disposal", "compost", "throw", "clean up" } 
+            { "Garbage and Recycling", new[]
+                { "trash", "garbage", "waste", "rubbish", "bin", "recycle", "disposal", "compost", "throw", "clean up" }
             },
 
-            { "Amenities", new[] 
-                { "laundry", "washing machine", "washing", "machine", "dryer", "parking", "pool", "gym", "wifi", "internet", "tv", "kettle", "iron", "hair dryer" } 
+            { "Amenities", new[]
+                { "laundry", "washing machine", "washing", "machine", "dryer", "parking", "pool", "gym", "wifi", "internet", "tv", "kettle", "iron", "hair dryer" }
             },
 
-            { "Security and Safety", new[] 
-                { "lock", "key", "door", "security", "safety", "camera", "cctv", "alarm", "safe", "fire", "emergency", "exit", "first aid" } 
+            { "Security and Safety", new[]
+                { "security", "safety", "camera", "cctv", "alarm", "safe", "fire", "emergency", "exit", "first aid" }
             },
 
-            { "Lost Items", new[] 
-                { "lost", "left behind", "forgot", "missing", "found", "item", "belonging", "retrieve", "pickup" } 
+            { "Check-out", new[]
+                { "lock", "key", "door", "leave", "checkout", "check-out", "check out", "gate" }
             },
 
-            { "Wi-Fi", new[] 
-                { "wifi", "wi-fi", "internet", "password", "connect", "network", "slow internet", "connection", "router" } 
+            { "Lost Items", new[]
+                { "lost", "left behind", "forgot", "missing", "found", "item", "belonging", "retrieve", "pickup" }
             },
 
-            { "Heating/Cooling", new[] 
-                { "aircon", "air conditioning", "heater", "heat", "cooling", "temperature", "thermostat", "fan", "warm", "cold" } 
+            { "Wi-Fi", new[]
+                { "wifi", "wi-fi", "internet", "password", "connect", "network", "slow internet", "connection", "router" }
             },
 
-            { "Communication", new[] 
-                { "message", "contact", "call", "sms", "whatsapp", "text", "reach", "respond", "reply", "communication", "host", "manager" } 
+            { "Heating/Cooling", new[]
+                { "aircon", "air conditioning", "heater", "heat", "cooling", "temperature", "thermostat", "fan", "warm", "cold" }
+            },
+
+            { "Communication", new[]
+                { "message", "contact", "call", "sms", "whatsapp", "text", "reach", "respond", "reply", "communication", "host", "manager" }
+            },
+
+            { "Flooding", new[]
+                { "flood", "flooding", "rain", "storm", "weather", "road closed", "street flooded", "heavy rain", "accessible", "water", "mud", "road access" }
             }
         };
 
@@ -127,7 +136,7 @@ public class RuleRepository : IRuleRepository
         if (!string.IsNullOrEmpty(matchedCategory))
             query = query.Where(r => r.RuleCategory.Name == matchedCategory);
         else
-            query = query.Take(5); // fallback: limit
+            query = query.Take(0); // fallback: limit
 
         return await query.ToListAsync();
     }
