@@ -1,36 +1,37 @@
 using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using System.Text.RegularExpressions;
 
 namespace WebhookApi.Services
 {
-    public class TelegramReceiverService : BackgroundService
+    public partial class TelegramReceiverService(
+        ILogger<TelegramReceiverService> logger,
+        IConfiguration configuration
+    ) : BackgroundService
     {
-        private readonly ILogger<TelegramReceiverService> _logger;
-        private readonly IConfiguration _configuration;
         private TelegramBotClient? _botClient;
+        // Generate the Regex at compile-time
+        [GeneratedRegex(@"^\+?\d{3,}$", RegexOptions.CultureInvariant)]
+        private static partial Regex PhoneRegex();
 
-        public TelegramReceiverService(ILogger<TelegramReceiverService> logger, IConfiguration configuration)
-        {
-            _logger = logger;
-            _configuration = configuration;
-        }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            var botToken = _configuration["Telegram:BotToken"];
+            var botToken = configuration["Telegram:BotToken"];
             if (string.IsNullOrEmpty(botToken))
             {
-                _logger.LogWarning("Telegram bot token is not configured.");
+                logger.LogWarning("Telegram bot token is not configured.");
                 return;
             }
 
             _botClient = new TelegramBotClient(botToken);
 
+            UpdateType[] allowedUpdates = [];
             var receiverOptions = new ReceiverOptions
             {
-                AllowedUpdates = [] // receive all update types
+                AllowedUpdates = allowedUpdates
             };
 
             _botClient.StartReceiving(
@@ -43,7 +44,7 @@ namespace WebhookApi.Services
                 },
                 (client, exception, token) =>
                 {
-                    _logger.LogError(exception, "Telegram polling error");
+                    logger.LogError(exception, "Telegram polling error");
                     return Task.CompletedTask;
                 },
                 receiverOptions,
@@ -64,9 +65,8 @@ namespace WebhookApi.Services
                     var phoneNumber = parts[0];
                     var smsMessage = parts[1];
 
-                    // Simple regex: starts with optional +, then digits, at least 10 digits
-                    var phoneRegex = new Regex(@"^\+?\d{3,}$");
-                    if (phoneRegex.IsMatch(phoneNumber))
+                    // Use compiled static regex: starts with optional +, then digits
+                    if (PhoneRegex().IsMatch(phoneNumber))
                     {
                         // Prepare the payload
                         var payload = new
@@ -76,9 +76,9 @@ namespace WebhookApi.Services
                         };
 
                         // Read SMS gateway config from appsettings
-                        var smsGatewayUrl = _configuration["SmsGateway:Url"] ?? "";
-                        var smsGatewayUser = _configuration["SmsGateway:User"] ?? "";
-                        var smsGatewayPass = _configuration["SmsGateway:Password"] ?? "";
+                        var smsGatewayUrl = configuration["SmsGateway:Url"] ?? "";
+                        var smsGatewayUser = configuration["SmsGateway:User"] ?? "";
+                        var smsGatewayPass = configuration["SmsGateway:Password"] ?? "";
 
                         using var httpClient = new HttpClient();
                         var byteArray = System.Text.Encoding.ASCII.GetBytes($"{smsGatewayUser}:{smsGatewayPass}");
@@ -106,7 +106,7 @@ namespace WebhookApi.Services
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogError(ex, "Error sending SMS via gateway");
+                            logger.LogError(ex, "Error sending SMS via gateway");
                             await client.SendTextMessageAsync(
                                 chatId: message.Chat.Id,
                                 text: "❌ Error sending SMS.",
@@ -114,13 +114,6 @@ namespace WebhookApi.Services
                         }
                     }
                 }
-                // else
-                // {
-                //     await client.SendTextMessageAsync(
-                //         chatId: message.Chat.Id,
-                //         text: "Please send in the format: <phone_number> <message>",
-                //         cancellationToken: token);
-                // }
             }
         }
     }
