@@ -32,6 +32,12 @@ namespace WebhookApi.Services
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            if (!bool.TryParse(_configuration["AiTelegramService:Enabled"], out var isEnabled) || !isEnabled)
+            {
+                _logger.LogInformation("Ai Telegram is not enabled via configuration.");
+                return;
+            }
+
             var aiBotToken = _configuration["Telegram:AiBotToken"];
             if (string.IsNullOrEmpty(aiBotToken))
             {

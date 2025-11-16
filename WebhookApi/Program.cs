@@ -20,6 +20,8 @@ builder.Services.AddSingleton<IConnectionFactory>(sp =>
 // Add RabbitMQ consumer service
 builder.Services.AddHostedService<GmailNotificationConsumer>();
 builder.Services.AddHostedService<WebhookApi.Services.TelegramReceiverService>();
+builder.Services.AddHttpClient();
+builder.Services.AddHostedService<WebhookApi.Services.TailscaleMonitorService>();
 builder.Services.AddHostedService<WebhookApi.Services.AiTelegramService>();
 
 // Add services to the container.

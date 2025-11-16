@@ -16,9 +16,14 @@ namespace WebhookApi.Services
         [GeneratedRegex(@"^\+?\d{3,}$", RegexOptions.CultureInvariant)]
         private static partial Regex PhoneRegex();
 
-
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+             if (!bool.TryParse(configuration["TelegramReceiverService:Enabled"], out var isEnabled) || !isEnabled)
+            {
+                logger.LogInformation("Telegram Receiver Service is not enabled via configuration.");
+                return;
+            }
+
             var botToken = configuration["Telegram:BotToken"];
             if (string.IsNullOrEmpty(botToken))
             {

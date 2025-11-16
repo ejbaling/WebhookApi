@@ -106,7 +106,7 @@ public class GmailNotificationConsumer : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (bool.TryParse(_configuration["GmailNotification:Disabled"], out var isDisabled) && isDisabled)
+        if (!bool.TryParse(_configuration["GmailNotification:Enabled"], out var isEnabled) || !isEnabled)
         {
             _logger.LogInformation("Gmail notification consumer is disabled via configuration.");
             return;
