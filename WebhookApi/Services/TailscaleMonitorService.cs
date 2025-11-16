@@ -30,8 +30,8 @@ namespace WebhookApi.Services
             var offlineMinutesThreshold = _configuration.GetValue<int?>("Tailscale:OfflineMinutesThreshold") ?? 5;
 
             // Initialize Telegram client if configured
-            var botToken = _configuration["Telegram:BotToken"]?.Trim();
-            _telegramChatId = _configuration["Telegram:ChatId"]?.Trim();
+            var botToken = _configuration["Telegram:AiBotToken"]?.Trim();
+            _telegramChatId = _configuration["Telegram:AiChatId"]?.Trim();
             if (!string.IsNullOrEmpty(botToken) && !string.IsNullOrEmpty(_telegramChatId))
             {
                 try
