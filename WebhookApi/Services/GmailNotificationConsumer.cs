@@ -386,10 +386,13 @@ public class GmailNotificationConsumer : BackgroundService
                                                 text: telegramMessage,
                                                 cancellationToken: CancellationToken.None);
 
-                                            await botClient.SendTextMessageAsync(
-                                                new Telegram.Bot.Types.ChatId("@redwoodiloiloskycast"),
-                                                text: qaResponse?.Answer ?? "Sorry, no response from AI.",
-                                                cancellationToken: CancellationToken.None);
+                                            if (aiConfig?.Value == true)
+                                            {
+                                                await botClient.SendTextMessageAsync(
+                                                    new Telegram.Bot.Types.ChatId("@redwoodiloiloskycast"),
+                                                    text: qaResponse?.Answer ?? "Sorry, no response from AI.",
+                                                    cancellationToken: CancellationToken.None);
+                                            }
 
                                             _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
                                         }
