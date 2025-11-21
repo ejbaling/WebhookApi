@@ -29,6 +29,9 @@ namespace WebhookApi.Services
             var pollIntervalSeconds = _configuration.GetValue<int?>("Tailscale:PollIntervalSeconds") ?? 60;
             var offlineMinutesThreshold = _configuration.GetValue<int?>("Tailscale:OfflineMinutesThreshold") ?? 5;
 
+            var allowed = _configuration.GetSection("Tailscale:AllowedDeviceNames")?.Get<string[]>() ?? Array.Empty<string>();
+            var allowedSet = new HashSet<string>(allowed, StringComparer.OrdinalIgnoreCase);
+
             // Initialize Telegram client if configured
             var botToken = _configuration["Telegram:AiBotToken"]?.Trim();
             _telegramChatId = _configuration["Telegram:AiChatId"]?.Trim();
@@ -105,6 +108,9 @@ namespace WebhookApi.Services
                         string name = device.TryGetProperty("hostname", out var hn) && hn.ValueKind == JsonValueKind.String
                             ? hn.GetString() ?? id
                             : (device.TryGetProperty("name", out var n2) ? n2.GetString() ?? id : id);
+
+                        if (allowedSet.Count > 0 && !allowedSet.Contains(name))
+                            continue;
 
                         bool isOnline = false;
                         if (device.TryGetProperty("online", out var onlineProp) && onlineProp.ValueKind == JsonValueKind.True)
