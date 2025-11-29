@@ -94,14 +94,8 @@ namespace WebhookApi.Services
                         try
                         {
                             var response = await httpClient.PostAsync(smsGatewayUrl, content, token);
-                            if (response.IsSuccessStatusCode)
-                            {
-                                await client.SendTextMessageAsync(
-                                    chatId: message.Chat.Id,
-                                    text: "✅ SMS sent successfully!",
-                                    cancellationToken: token);
-                            }
-                            else
+                            // Only notify via Telegram on failure
+                            if (!response.IsSuccessStatusCode)
                             {
                                 await client.SendTextMessageAsync(
                                     chatId: message.Chat.Id,
