@@ -6,6 +6,8 @@ using WebhookApi.Services;
 using WebhookApi.Data;
 using Microsoft.EntityFrameworkCore;
 using RedwoodIloilo.Common.Entities;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -94,7 +96,7 @@ app.MapPost("gmail/notifications", async (HttpContext context, IConnectionFactor
 .WithName("ProcessGmailWebhook");
 
 
-app.MapPost("sms/notifications", async (HttpContext context, IConnectionFactory connectionFactory, ILogger<Program> logger, IConfiguration config) =>
+app.MapPost("sms/notifications", async (HttpContext context, IConnectionFactory connectionFactory, ILogger<Program> logger, IConfiguration config, IHttpClientFactory httpClientFactory) =>
 {
     using var reader = new StreamReader(context.Request.Body);
     var requestBody = await reader.ReadToEndAsync();
@@ -120,7 +122,7 @@ app.MapPost("sms/notifications", async (HttpContext context, IConnectionFactory 
 
     string messageToSend;
     string phoneNumber = "";
-    
+
     try
     {
         var json = JsonDocument.Parse(requestBody);
@@ -149,16 +151,64 @@ app.MapPost("sms/notifications", async (HttpContext context, IConnectionFactory 
     var blackListedPhoneNumbers = config.GetSection("BlackListedPhoneNumbers").Get<string[]>();
     if (blackListedPhoneNumbers != null && blackListedPhoneNumbers.Contains(phoneNumber, StringComparer.OrdinalIgnoreCase))
     {
-        logger.LogInformation("Phone number {PhoneNumber} is blacklisted. Not sending message to Telegram.", phoneNumber);
+        logger.LogInformation("Phone number {PhoneNumber} is blacklisted. Not sending message to Telegram or SMS.", phoneNumber);
         return Results.Ok("Phone number is blacklisted.");
     }
 
+    // Send Telegram message
     await botClient.SendTextMessageAsync(
         new Telegram.Bot.Types.ChatId(chatId),
         text: $"{phoneNumber} {messageToSend}".Trim(),
         cancellationToken: CancellationToken.None);
 
-    return Results.Ok("Webhook received and forwarded to Telegram");
+    // Send SMS via configured SmsGateway (if configured)
+    var smsGatewayUrl = config["SmsGateway:Url"] ?? "";
+    if (!string.IsNullOrWhiteSpace(smsGatewayUrl))
+    {
+        // Read an array from configuration
+        var targetNumbers = config.GetSection("SmsGateway:ForwardToNumbers").Get<string[]>() ?? Array.Empty<string>();
+        if (targetNumbers.Length > 0)
+        {
+            var smsUser = config["SmsGateway:User"] ?? "";
+            var smsPass = config["SmsGateway:Password"] ?? "";
+
+            var client = httpClientFactory.CreateClient(nameof(Program));
+            if (!string.IsNullOrEmpty(smsUser) || !string.IsNullOrEmpty(smsPass))
+            {
+                var creds = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{smsUser}:{smsPass}"));
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", creds);
+            }
+
+            var payload = new
+            {
+                message = messageToSend,
+                phoneNumbers = targetNumbers
+            };
+
+            try
+            {
+                var smsResponse = await client.PostAsJsonAsync(smsGatewayUrl, payload, CancellationToken.None);
+                if (!smsResponse.IsSuccessStatusCode)
+                {
+                    logger.LogWarning("SMS gateway returned non-success status {StatusCode} for {Numbers}", smsResponse.StatusCode, string.Join(", ", targetNumbers));
+                }
+                else
+                {
+                    logger.LogInformation("SMS sent to {Numbers} via gateway", string.Join(", ", targetNumbers));
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to send SMS to {Numbers} via gateway", string.Join(", ", targetNumbers));
+            }
+        }
+        else
+        {
+            logger.LogWarning("SmsGateway configured but no target numbers available (SmsGateway:ForwardToNumbers empty).");
+        }
+    }
+
+    return Results.Ok("Webhook received and forwarded to Telegram (and SMS if configured)");
 })
 .WithName("ProcessSmsWebhook");
 
