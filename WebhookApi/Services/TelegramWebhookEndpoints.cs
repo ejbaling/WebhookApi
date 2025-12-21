@@ -31,7 +31,17 @@ public static class TelegramWebhookEndpoints
 
         var logger = app.Logger;
 
-        app.MapPost("/telegram/webhook", async (HttpRequest req, Update update) =>
+        app.MapPost("/telegram/webhook", async (HttpRequest req) =>
+        {
+            var remoteIp = req.HttpContext.Connection.RemoteIpAddress?.ToString();
+            using var reader = new StreamReader(req.Body);
+            var body = await reader.ReadToEndAsync();
+            app.Logger.LogInformation("Telegram webhook hit from {RemoteIp}; body: {Body}", remoteIp, body);
+
+            return Results.Ok();
+        });
+
+        app.MapPost("/telegram/webhook1", async (HttpRequest req, Update update) =>
         {
             var remoteIp = req.HttpContext.Connection.RemoteIpAddress?.ToString();
             logger.LogInformation("Telegram webhook hit from {RemoteIp} type={UpdateType}", remoteIp,
