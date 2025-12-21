@@ -3,6 +3,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
+using System.Text.Json;
 
 namespace WebhookApi.Services;
 
@@ -36,65 +37,80 @@ public static class TelegramWebhookEndpoints
             var remoteIp = req.HttpContext.Connection.RemoteIpAddress?.ToString();
             using var reader = new StreamReader(req.Body);
             var body = await reader.ReadToEndAsync();
-            app.Logger.LogInformation("Telegram webhook hit from {RemoteIp}; body: {Body}", remoteIp, body);
+            logger.LogInformation("Telegram webhook hit from {RemoteIp}; body: {Body}", remoteIp, body);
 
-            return Results.Ok();
-        });
-
-        app.MapPost("/telegram/webhook1", async (HttpRequest req, Update update) =>
-        {
-            var remoteIp = req.HttpContext.Connection.RemoteIpAddress?.ToString();
-            logger.LogInformation("Telegram webhook hit from {RemoteIp} type={UpdateType}", remoteIp,
-                update.CallbackQuery != null ? "callback" : update.Message != null ? "message" : "other");
-
-            // CallbackQuery handling
-            if (update.CallbackQuery is not null)
-            {
-                var cb = update.CallbackQuery;
-                if (cb.Message == null) return Results.BadRequest();
-
-                string chatId = cb.Message.Chat.Id.ToString();
-                string data = cb.Data ?? string.Empty;
-
-                if (data == "confirm_shutdown")
-                {
-                    await Task.Delay(500); // simulate
-                    await botClient.SendTextMessageAsync(chatId, "✅ Server shutdown executed.");
-                    auditLog.Add($"[{DateTime.Now}] Shutdown confirmed");
-                }
-                else if (data == "cancel")
-                {
-                    await botClient.SendTextMessageAsync(chatId, "❌ Action cancelled.");
-                    auditLog.Add($"[{DateTime.Now}] Action cancelled");
-                }
-
-                return Results.Ok();
-            }
-
-            // Handle normal messages
-            if (update.Message is null)
-                return Results.Ok();
-
-            if (update.Message.From is null)
+            if (string.IsNullOrWhiteSpace(body))
                 return Results.BadRequest();
 
-            // If AllowedUserId not configured (or invalid) treat as unauthorized
-            if (allowedUserId == 0 || update.Message.From.Id != allowedUserId)
-                return Results.Unauthorized();
-
-            string chat = update.Message.Chat.Id.ToString();
-            string text = update.Message.Text ?? string.Empty;
-
-            if (text.StartsWith("/"))
+            try
             {
-                await HandleCommand(botClient, chat, text, tools, auditLog);
-            }
-            else
-            {
-                await botClient.SendTextMessageAsync(chat, $"You said: {text}\nLater we can parse this with AI/MCP.");
-            }
+                using var doc = JsonDocument.Parse(body);
+                var root = doc.RootElement;
 
-            return Results.Ok();
+                // CallbackQuery
+                if (root.TryGetProperty("callback_query", out var cbElem) && cbElem.ValueKind == JsonValueKind.Object)
+                {
+                    if (!cbElem.TryGetProperty("message", out var msgElem) || msgElem.ValueKind != JsonValueKind.Object)
+                        return Results.BadRequest();
+
+                    var chatId = msgElem.GetProperty("chat").GetProperty("id").GetInt64().ToString();
+                    var data = cbElem.GetProperty("data").GetString() ?? string.Empty;
+
+                    if (data == "confirm_shutdown")
+                    {
+                        await Task.Delay(500);
+                        await botClient.SendTextMessageAsync(chatId, "✅ Server shutdown executed.");
+                        auditLog.Add($"[{DateTime.Now}] Shutdown confirmed");
+                    }
+                    else if (data == "cancel")
+                    {
+                        await botClient.SendTextMessageAsync(chatId, "❌ Action cancelled.");
+                        auditLog.Add($"[{DateTime.Now}] Action cancelled");
+                    }
+
+                    return Results.Ok();
+                }
+
+                // Message
+                if (root.TryGetProperty("message", out var messageElem) && messageElem.ValueKind == JsonValueKind.Object)
+                {
+                    if (!messageElem.TryGetProperty("from", out var fromElem) || fromElem.ValueKind != JsonValueKind.Object)
+                        return Results.BadRequest();
+
+                    var fromId = fromElem.GetProperty("id").GetInt64();
+                    if (allowedUserId == 0 || fromId != allowedUserId)
+                        return Results.Unauthorized();
+
+                    var chatId = messageElem.GetProperty("chat").GetProperty("id").GetInt64().ToString();
+                    var text = messageElem.TryGetProperty("text", out var textElem) && textElem.ValueKind == JsonValueKind.String
+                        ? textElem.GetString() ?? string.Empty
+                        : string.Empty;
+
+                    if (text.StartsWith("/"))
+                    {
+                        await HandleCommand(botClient, chatId, text, tools, auditLog);
+                    }
+                    else
+                    {
+                        await botClient.SendTextMessageAsync(chatId, $"You said: {text}\nLater we can parse this with AI/MCP.");
+                    }
+
+                    return Results.Ok();
+                }
+
+                // nothing relevant
+                return Results.Ok();
+            }
+            catch (JsonException ex)
+            {
+                logger.LogWarning(ex, "Failed to parse Telegram webhook JSON");
+                return Results.BadRequest();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error handling Telegram webhook");
+                return Results.Problem();
+            }
         });
     }
 
