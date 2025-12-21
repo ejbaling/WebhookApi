@@ -29,10 +29,15 @@ public static class TelegramWebhookEndpoints
             }}
         };
 
+        var logger = app.Logger;
+
         app.MapPost("/telegram/webhook", async (HttpRequest req, Update update) =>
         {
-            // Telegram delivers both messages and callback queries as Update objects to the webhook URL.
-            // Handle callback queries first.
+            var remoteIp = req.HttpContext.Connection.RemoteIpAddress?.ToString();
+            logger.LogInformation("Telegram webhook hit from {RemoteIp} type={UpdateType}", remoteIp,
+                update.CallbackQuery != null ? "callback" : update.Message != null ? "message" : "other");
+
+            // CallbackQuery handling
             if (update.CallbackQuery is not null)
             {
                 var cb = update.CallbackQuery;
