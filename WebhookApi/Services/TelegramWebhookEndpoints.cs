@@ -78,8 +78,12 @@ public static class TelegramWebhookEndpoints
                         return Results.BadRequest();
 
                     var fromId = fromElem.GetProperty("id").GetInt64();
+                    logger.LogInformation("Telegram message from user ID: {FromId}", fromId);
                     if (allowedUserId == 0 || fromId != allowedUserId)
-                        return Results.Unauthorized();
+                    {
+                        logger.LogInformation("Dropping Telegram message from {FromId} (not allowed); acknowledging to stop retries", fromId);
+                        return Results.Ok(); // acknowledge to Telegram so it won't retry
+                    }
 
                     var chatId = messageElem.GetProperty("chat").GetProperty("id").GetInt64().ToString();
                     var text = messageElem.TryGetProperty("text", out var textElem) && textElem.ValueKind == JsonValueKind.String
