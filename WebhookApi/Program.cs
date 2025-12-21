@@ -23,7 +23,20 @@ builder.Services.AddSingleton<IConnectionFactory>(sp =>
 builder.Services.AddHostedService<GmailNotificationConsumer>();
 builder.Services.AddHostedService<WebhookApi.Services.TelegramReceiverService>();
 builder.Services.AddHttpClient();
-builder.Services.AddHostedService<WebhookApi.Services.TailscaleMonitorService>();
+// Register TelegramBotClient singleton from configuration
+builder.Services.AddSingleton<TelegramBotClient>(sp =>
+{
+    var cfg = sp.GetRequiredService<IConfiguration>().GetSection("Telegram");
+    var token = cfg["AdminBotToken"] ?? string.Empty;
+    if (string.IsNullOrEmpty(token))
+        throw new InvalidOperationException("Telegram:BotToken configuration is required");
+    return new TelegramBotClient(token);
+});
+// Add Tailscale monitor only when enabled in configuration
+if (builder.Configuration.GetValue<bool?>("Tailscale:Enabled") ?? false)
+{
+    builder.Services.AddHostedService<WebhookApi.Services.TailscaleMonitorService>();
+}
 builder.Services.AddHostedService<WebhookApi.Services.AiTelegramService>();
 
 // Add services to the container.
@@ -39,6 +52,9 @@ builder.Services.AddScoped<IRuleRepository, RuleRepository>();
 builder.Services.AddHttpClient();
 
 var app = builder.Build();
+
+// Map Telegram webhook endpoints (refactored into service extension)
+app.MapTelegramWebhookEndpoints();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
