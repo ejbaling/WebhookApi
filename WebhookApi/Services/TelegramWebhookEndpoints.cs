@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -9,6 +10,8 @@ namespace WebhookApi.Services;
 
 public static class TelegramWebhookEndpoints
 {
+    private record PendingAction(string ActionName, Dictionary<string, string> Parameters, long RequestedBy, DateTime CreatedAt);
+
     public static void MapTelegramWebhookEndpoints(this WebApplication app)
     {
         var cfg = app.Configuration.GetSection("Telegram");
@@ -17,7 +20,9 @@ public static class TelegramWebhookEndpoints
         long.TryParse(cfg["AllowedUserId"], out var allowedUserId);
 
         var auditLog = new List<string>();
-        var tools = new Dictionary<string, Func<Dictionary<string,string>, Task<string>>>(StringComparer.OrdinalIgnoreCase)
+        var pendingActions = new ConcurrentDictionary<string, PendingAction>(StringComparer.OrdinalIgnoreCase);
+
+        var tools = new Dictionary<string, Func<Dictionary<string, string>, Task<string>>>(StringComparer.OrdinalIgnoreCase)
         {
             { "shutdown_server", async (parameters) => {
                 string env = parameters.GetValueOrDefault("environment", "unknown");
@@ -31,6 +36,7 @@ public static class TelegramWebhookEndpoints
         };
 
         var logger = app.Logger;
+        var executionSemaphores = new ConcurrentDictionary<string, SemaphoreSlim>();
 
         app.MapPost("/telegram/webhook", async (HttpRequest req) =>
         {
@@ -47,7 +53,7 @@ public static class TelegramWebhookEndpoints
                 using var doc = JsonDocument.Parse(body);
                 var root = doc.RootElement;
 
-                // CallbackQuery
+                // CallbackQuery handling: expect data like "confirm:{id}" or "cancel:{id}"
                 if (root.TryGetProperty("callback_query", out var cbElem) && cbElem.ValueKind == JsonValueKind.Object)
                 {
                     if (!cbElem.TryGetProperty("message", out var msgElem) || msgElem.ValueKind != JsonValueKind.Object)
@@ -55,23 +61,80 @@ public static class TelegramWebhookEndpoints
 
                     var chatId = msgElem.GetProperty("chat").GetProperty("id").GetInt64().ToString();
                     var data = cbElem.GetProperty("data").GetString() ?? string.Empty;
+                    var fromId = cbElem.TryGetProperty("from", out var cbFrom) && cbFrom.TryGetProperty("id", out var cbFromId) && cbFromId.ValueKind == JsonValueKind.Number
+                        ? cbFromId.GetInt64()
+                        : 0L;
 
-                    if (data == "confirm_shutdown")
+                    if (data.StartsWith("confirm:", StringComparison.OrdinalIgnoreCase) || data.StartsWith("cancel:", StringComparison.OrdinalIgnoreCase))
                     {
-                        await Task.Delay(500);
-                        await botClient.SendTextMessageAsync(chatId, "✅ Server shutdown executed.");
-                        auditLog.Add($"[{DateTime.Now}] Shutdown confirmed");
-                    }
-                    else if (data == "cancel")
-                    {
-                        await botClient.SendTextMessageAsync(chatId, "❌ Action cancelled.");
-                        auditLog.Add($"[{DateTime.Now}] Action cancelled");
+                        var parts = data.Split(':', 2);
+                        if (parts.Length != 2)
+                        {
+                            await botClient.SendTextMessageAsync(chatId, "Invalid callback data.");
+                            return Results.Ok();
+                        }
+
+                        var kind = parts[0].ToLowerInvariant();
+                        var id = parts[1];
+
+                        var sem = executionSemaphores.GetOrAdd(id, _ => new SemaphoreSlim(1, 1));
+                        await sem.WaitAsync();
+                        try
+                        {
+                            if (!pendingActions.TryGetValue(id, out var pending))
+                            {
+                                await botClient.SendTextMessageAsync(chatId, "This action has expired or is unknown.");
+                                return Results.Ok();
+                            }
+
+                            if (kind == "cancel")
+                            {
+                                // remove when cancelled
+                                pendingActions.TryRemove(id, out _);
+                                await botClient.SendTextMessageAsync(chatId, "❌ Action cancelled.");
+                                auditLog.Add($"[{DateTime.UtcNow}] Action {pending.ActionName} cancelled by {fromId}");
+                                return Results.Ok();
+                            }
+
+                            if (!tools.TryGetValue(pending.ActionName, out var executor))
+                            {
+                                await botClient.SendTextMessageAsync(chatId, $"Unknown action: {pending.ActionName}");
+                                return Results.Ok();
+                            }
+
+                            if (pending.RequestedBy != 0 && fromId != pending.RequestedBy)
+                            {
+                                await botClient.SendTextMessageAsync(chatId, "You are not authorized to confirm this action.");
+                                return Results.Ok();
+                            }
+
+                            try
+                            {
+                                var result = await executor(pending.Parameters);
+                                // remove only after success
+                                pendingActions.TryRemove(id, out _);
+                                await botClient.SendTextMessageAsync(chatId, $"✅ {result}");
+                                auditLog.Add($"[{DateTime.UtcNow}] Action {pending.ActionName} confirmed by {fromId}");
+                            }
+                            catch (Exception ex)
+                            {
+                                logger.LogError(ex, "Failed executing action {Action} id={Id}", pending.ActionName, id);
+                                await botClient.SendTextMessageAsync(chatId, $"Error executing action (kept pending): {ex.Message}");
+                            }
+                        }
+                        finally
+                        {
+                            sem.Release();
+                            executionSemaphores.TryRemove(id, out _);
+                        }
+
+                        return Results.Ok();
                     }
 
                     return Results.Ok();
                 }
 
-                // Message
+                // Message handling
                 if (root.TryGetProperty("message", out var messageElem) && messageElem.ValueKind == JsonValueKind.Object)
                 {
                     if (!messageElem.TryGetProperty("from", out var fromElem) || fromElem.ValueKind != JsonValueKind.Object)
@@ -92,7 +155,37 @@ public static class TelegramWebhookEndpoints
 
                     if (text.StartsWith("/"))
                     {
-                        await HandleCommand(botClient, chatId, text, tools, auditLog);
+                        // create a pending action for commands that need confirmation
+                        if (text.StartsWith("/shutdown", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var id = Guid.NewGuid().ToString("N");
+                            var paramsDict = new Dictionary<string, string> { { "environment", "prod" } };
+                            var pending = new PendingAction("shutdown_server", paramsDict, fromId, DateTime.UtcNow);
+                            pendingActions[id] = pending;
+
+                            var inlineKeyboard = new InlineKeyboardMarkup(new[]
+                            {
+                                new []
+                                {
+                                    InlineKeyboardButton.WithCallbackData("✅ Yes", $"confirm:{id}"),
+                                    InlineKeyboardButton.WithCallbackData("❌ Cancel", $"cancel:{id}")
+                                }
+                            });
+
+                            await botClient.SendTextMessageAsync(chatId, $"⚠️ This will shutdown the server. Confirm? (id={id.Substring(0,8)})", replyMarkup: inlineKeyboard);
+                            auditLog.Add($"[{DateTime.UtcNow}] Shutdown requested by {fromId}, id={id}");
+                        }
+                        else if (text.StartsWith("/lights_off", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // immediate action for lights_off
+                            string result = await tools["lights_off"](new Dictionary<string, string>());
+                            await botClient.SendTextMessageAsync(chatId, result);
+                            auditLog.Add($"[{DateTime.UtcNow}] Lights off executed by {fromId}");
+                        }
+                        else
+                        {
+                            await botClient.SendTextMessageAsync(chatId, "Unknown command.");
+                        }
                     }
                     else
                     {
@@ -102,7 +195,6 @@ public static class TelegramWebhookEndpoints
                     return Results.Ok();
                 }
 
-                // nothing relevant
                 return Results.Ok();
             }
             catch (JsonException ex)
@@ -116,28 +208,5 @@ public static class TelegramWebhookEndpoints
                 return Results.Problem();
             }
         });
-    }
-
-    private static async Task HandleCommand(TelegramBotClient bot, string chatId, string command, Dictionary<string, Func<Dictionary<string,string>, Task<string>>> tools, List<string> audit)
-    {
-        if (command.StartsWith("/shutdown"))
-        {
-            var inlineKeyboard = new InlineKeyboardMarkup(new[]
-            {
-                new []
-                {
-                    InlineKeyboardButton.WithCallbackData("✅ Yes","confirm_shutdown"),
-                    InlineKeyboardButton.WithCallbackData("❌ Cancel","cancel")
-                }
-            });
-            await bot.SendTextMessageAsync(chatId, "⚠️ This will shutdown the server. Confirm?", replyMarkup:inlineKeyboard);
-            audit.Add($"[{DateTime.Now}] Shutdown requested");
-        }
-        else if (command.StartsWith("/lights_off"))
-        {
-            string result = await tools["lights_off"](new Dictionary<string,string>());
-            await bot.SendTextMessageAsync(chatId, result);
-            audit.Add($"[{DateTime.Now}] Lights off executed");
-        }
     }
 }
