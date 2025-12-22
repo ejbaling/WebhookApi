@@ -37,6 +37,7 @@ public static class TelegramWebhookEndpoints
 
         var logger = app.Logger;
         var executionSemaphores = new ConcurrentDictionary<string, SemaphoreSlim>();
+        var intentParser = app.Services.GetRequiredService<IIntentParser>();
 
         app.MapPost("/telegram/webhook", async (HttpRequest req) =>
         {
@@ -189,7 +190,44 @@ public static class TelegramWebhookEndpoints
                     }
                     else
                     {
-                        await botClient.SendTextMessageAsync(chatId, $"You said: {text}\nLater we can parse this with AI/MCP.");
+                        // Use intent parser (rule-based or AI-backed) to map NL to actions
+                        var intent = await intentParser.ParseAsync(text);
+                        if (intent.Action is null)
+                        {
+                            await botClient.SendTextMessageAsync(chatId, $"You said: {text}\n(I didn't detect an actionable intent.)");
+                        }
+                        else
+                        {
+                            if (!tools.ContainsKey(intent.Action))
+                            {
+                                await botClient.SendTextMessageAsync(chatId, $"Detected action '{intent.Action}' is not supported.");
+                            }
+                            else if (intent.RequireConfirm)
+                            {
+                                var id = Guid.NewGuid().ToString("N");
+                                var pending = new PendingAction(intent.Action, intent.Parameters ?? new Dictionary<string,string>(), fromId, DateTime.UtcNow);
+                                pendingActions[id] = pending;
+
+                                var inlineKeyboard = new InlineKeyboardMarkup(new[]
+                                {
+                                    new []
+                                    {
+                                        InlineKeyboardButton.WithCallbackData("✅ Yes", $"confirm:{id}"),
+                                        InlineKeyboardButton.WithCallbackData("❌ Cancel", $"cancel:{id}")
+                                    }
+                                });
+
+                                await botClient.SendTextMessageAsync(chatId, $"⚠️ Confirm: {intent.Action}? (id={id.Substring(0,8)})", replyMarkup: inlineKeyboard);
+                                auditLog.Add($"[{DateTime.UtcNow}] Intent {intent.Action} requested by {fromId}, id={id}");
+                            }
+                            else
+                            {
+                                // execute immediately
+                                var result = await tools[intent.Action](intent.Parameters ?? new Dictionary<string,string>());
+                                await botClient.SendTextMessageAsync(chatId, result);
+                                auditLog.Add($"[{DateTime.UtcNow}] Intent {intent.Action} executed by {fromId}");
+                            }
+                        }
                     }
 
                     return Results.Ok();

@@ -23,6 +23,8 @@ builder.Services.AddSingleton<IConnectionFactory>(sp =>
 builder.Services.AddHostedService<GmailNotificationConsumer>();
 builder.Services.AddHostedService<WebhookApi.Services.TelegramReceiverService>();
 builder.Services.AddHttpClient();
+// Register intent parser (LLM-backed by default)
+builder.Services.AddSingleton<WebhookApi.Services.IIntentParser, WebhookApi.Services.OpenAiIntentParser>();
 // Register TelegramBotClient singleton from configuration
 builder.Services.AddSingleton<TelegramBotClient>(sp =>
 {
