@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Threading;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -10,8 +11,6 @@ namespace WebhookApi.Services;
 
 public static class TelegramWebhookEndpoints
 {
-    private record PendingAction(string ActionName, Dictionary<string, string> Parameters, long RequestedBy, DateTime CreatedAt);
-
     public static void MapTelegramWebhookEndpoints(this WebApplication app)
     {
         var cfg = app.Configuration.GetSection("Telegram");
@@ -20,24 +19,12 @@ public static class TelegramWebhookEndpoints
         long.TryParse(cfg["AllowedUserId"], out var allowedUserId);
 
         var auditLog = new List<string>();
-        var pendingActions = new ConcurrentDictionary<string, PendingAction>(StringComparer.OrdinalIgnoreCase);
-
-        var tools = new Dictionary<string, Func<Dictionary<string, string>, Task<string>>>(StringComparer.OrdinalIgnoreCase)
-        {
-            { "shutdown_server", async (parameters) => {
-                string env = parameters.GetValueOrDefault("environment", "unknown");
-                await Task.Delay(500);
-                return $"Server {env} shutdown executed.";
-            }},
-            { "lights_off", async (parameters) => {
-                await Task.Delay(200);
-                return "Lights turned off.";
-            }}
-        };
-
         var logger = app.Logger;
-        var executionSemaphores = new ConcurrentDictionary<string, SemaphoreSlim>();
+
         var intentParser = app.Services.GetRequiredService<IIntentParser>();
+        var actionRegistry = app.Services.GetRequiredService<IActionRegistry>();
+        var pendingStore = app.Services.GetRequiredService<IPendingActionStore>();
+        var semaphoreStore = app.Services.GetRequiredService<ISemaphoreStore>();
 
         app.MapPost("/telegram/webhook", async (HttpRequest req) =>
         {
@@ -78,11 +65,11 @@ public static class TelegramWebhookEndpoints
                         var kind = parts[0].ToLowerInvariant();
                         var id = parts[1];
 
-                        var sem = executionSemaphores.GetOrAdd(id, _ => new SemaphoreSlim(1, 1));
+                        var sem = semaphoreStore.GetSemaphore(id);
                         await sem.WaitAsync();
                         try
                         {
-                            if (!pendingActions.TryGetValue(id, out var pending))
+                            if (!pendingStore.TryGet(id, out var pending))
                             {
                                 await botClient.SendTextMessageAsync(chatId, "This action has expired or is unknown.");
                                 return Results.Ok();
@@ -91,19 +78,19 @@ public static class TelegramWebhookEndpoints
                             if (kind == "cancel")
                             {
                                 // remove when cancelled
-                                pendingActions.TryRemove(id, out _);
+                                pendingStore.TryRemove(id, out _);
                                 await botClient.SendTextMessageAsync(chatId, "❌ Action cancelled.");
-                                auditLog.Add($"[{DateTime.UtcNow}] Action {pending.ActionName} cancelled by {fromId}");
+                                auditLog.Add($"[{DateTime.UtcNow}] Action {pending!.ActionName} cancelled by {fromId}");
                                 return Results.Ok();
                             }
 
-                            if (!tools.TryGetValue(pending.ActionName, out var executor))
+                            if (!actionRegistry.TryGetExecutor(pending!.ActionName, out var executor) || executor is null)
                             {
-                                await botClient.SendTextMessageAsync(chatId, $"Unknown action: {pending.ActionName}");
+                                await botClient.SendTextMessageAsync(chatId, $"Unknown action: {pending!.ActionName}");
                                 return Results.Ok();
                             }
 
-                            if (pending.RequestedBy != 0 && fromId != pending.RequestedBy)
+                            if (pending!.RequestedBy != 0 && fromId != pending.RequestedBy)
                             {
                                 await botClient.SendTextMessageAsync(chatId, "You are not authorized to confirm this action.");
                                 return Results.Ok();
@@ -111,22 +98,22 @@ public static class TelegramWebhookEndpoints
 
                             try
                             {
-                                var result = await executor(pending.Parameters);
+                                var result = await executor.ExecuteAsync(pending!.Parameters, CancellationToken.None);
                                 // remove only after success
-                                pendingActions.TryRemove(id, out _);
+                                pendingStore.TryRemove(id, out _);
                                 await botClient.SendTextMessageAsync(chatId, $"✅ {result}");
-                                auditLog.Add($"[{DateTime.UtcNow}] Action {pending.ActionName} confirmed by {fromId}");
+                                auditLog.Add($"[{DateTime.UtcNow}] Action {pending!.ActionName} confirmed by {fromId}");
                             }
                             catch (Exception ex)
                             {
-                                logger.LogError(ex, "Failed executing action {Action} id={Id}", pending.ActionName, id);
+                                logger.LogError(ex, "Failed executing action {Action} id={Id}", pending!.ActionName, id);
                                 await botClient.SendTextMessageAsync(chatId, $"Error executing action (kept pending): {ex.Message}");
                             }
                         }
                         finally
                         {
                             sem.Release();
-                            executionSemaphores.TryRemove(id, out _);
+                            semaphoreStore.TryRemove(id);
                         }
 
                         return Results.Ok();
@@ -162,7 +149,7 @@ public static class TelegramWebhookEndpoints
                             var id = Guid.NewGuid().ToString("N");
                             var paramsDict = new Dictionary<string, string> { { "environment", "prod" } };
                             var pending = new PendingAction("shutdown_server", paramsDict, fromId, DateTime.UtcNow);
-                            pendingActions[id] = pending;
+                            pendingStore.TryAdd(id, pending);
 
                             var inlineKeyboard = new InlineKeyboardMarkup(new[]
                             {
@@ -179,9 +166,16 @@ public static class TelegramWebhookEndpoints
                         else if (text.StartsWith("/lights_off", StringComparison.OrdinalIgnoreCase))
                         {
                             // immediate action for lights_off
-                            string result = await tools["lights_off"](new Dictionary<string, string>());
-                            await botClient.SendTextMessageAsync(chatId, result);
-                            auditLog.Add($"[{DateTime.UtcNow}] Lights off executed by {fromId}");
+                            if (actionRegistry.TryGetExecutor("lights_off", out var lightExec) && lightExec is not null)
+                            {
+                                var result = await lightExec.ExecuteAsync(new Dictionary<string,string>(), CancellationToken.None);
+                                await botClient.SendTextMessageAsync(chatId, result);
+                                auditLog.Add($"[{DateTime.UtcNow}] Lights off executed by {fromId}");
+                            }
+                            else
+                            {
+                                await botClient.SendTextMessageAsync(chatId, "Lights off action is not available.");
+                            }
                         }
                         else
                         {
@@ -198,7 +192,7 @@ public static class TelegramWebhookEndpoints
                         }
                         else
                         {
-                            if (!tools.ContainsKey(intent.Action))
+                            if (!actionRegistry.TryGetExecutor(intent.Action, out var intentExec) || intentExec is null)
                             {
                                 await botClient.SendTextMessageAsync(chatId, $"Detected action '{intent.Action}' is not supported.");
                             }
@@ -206,7 +200,7 @@ public static class TelegramWebhookEndpoints
                             {
                                 var id = Guid.NewGuid().ToString("N");
                                 var pending = new PendingAction(intent.Action, intent.Parameters ?? new Dictionary<string,string>(), fromId, DateTime.UtcNow);
-                                pendingActions[id] = pending;
+                                pendingStore.TryAdd(id, pending);
 
                                 var inlineKeyboard = new InlineKeyboardMarkup(new[]
                                 {
@@ -223,7 +217,8 @@ public static class TelegramWebhookEndpoints
                             else
                             {
                                 // execute immediately
-                                var result = await tools[intent.Action](intent.Parameters ?? new Dictionary<string,string>());
+                                var exec = intentExec!;
+                                var result = await exec.ExecuteAsync(intent.Parameters ?? new Dictionary<string,string>(), CancellationToken.None);
                                 await botClient.SendTextMessageAsync(chatId, result);
                                 auditLog.Add($"[{DateTime.UtcNow}] Intent {intent.Action} executed by {fromId}");
                             }

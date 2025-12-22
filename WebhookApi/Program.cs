@@ -34,6 +34,14 @@ builder.Services.AddSingleton<TelegramBotClient>(sp =>
         throw new InvalidOperationException("Telegram:BotToken configuration is required");
     return new TelegramBotClient(token);
 });
+// Action executors and registry
+builder.Services.AddSingleton<WebhookApi.Services.IActionExecutor, WebhookApi.Services.ShutdownExecutor>();
+builder.Services.AddSingleton<WebhookApi.Services.IActionExecutor, WebhookApi.Services.LightsOffExecutor>();
+builder.Services.AddSingleton<WebhookApi.Services.IActionRegistry, WebhookApi.Services.ActionRegistry>();
+
+// Pending action store and semaphore store
+builder.Services.AddSingleton<WebhookApi.Services.IPendingActionStore, WebhookApi.Services.PendingActionStore>();
+builder.Services.AddSingleton<WebhookApi.Services.ISemaphoreStore, WebhookApi.Services.SemaphoreStore>();
 // Add Tailscale monitor only when enabled in configuration
 if (builder.Configuration.GetValue<bool?>("Tailscale:Enabled") ?? false)
 {
