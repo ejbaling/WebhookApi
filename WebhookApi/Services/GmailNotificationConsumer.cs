@@ -48,7 +48,7 @@ public class GmailPushData
     public string? subscription { get; set; }
 }
 
-public class GmailNotificationConsumer : BackgroundService
+public partial class GmailNotificationConsumer : BackgroundService
 {
     private IConnection? _connection;
     private IChannel? _channel;
@@ -361,33 +361,38 @@ public class GmailNotificationConsumer : BackgroundService
 
                                             _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
                                         }
+                                    }
 
-                                        // Save to database
-                                        using (var scope = _scopeFactory.CreateScope())
+                                    // Save to database
+                                    // Determine sender and only save if from airbnb.com
+                                    var fromHeader = message.Payload?.Headers?.FirstOrDefault(h => h.Name == "From")?.Value ?? string.Empty;
+                                    bool isAirbnbSender = AirbnbRegex().IsMatch(fromHeader);
+
+                                    if (isAirbnbSender)
+                                    {
+                                        using var scope = _scopeFactory.CreateScope();
+                                        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                                        var guestMessage = new GuestMessage
                                         {
-                                            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                                            var guestMessage = new GuestMessage
-                                            {
-                                                Message = emailBody,
-                                                Language = "en", // Placeholder, implement language detection if needed
-                                                Category = "reservation", // Placeholder, implement category detection if needed
-                                                Sentiment = "neutral", // Placeholder, implement sentiment analysis if needed
-                                                ReplySuggestion = null // Placeholder, implement reply suggestion if needed
-                                            };
-                                            dbContext.GuestMessages.Add(guestMessage);
+                                            Message = emailBody,
+                                            Language = "en",
+                                            Category = "reservation",
+                                            Sentiment = "neutral",
+                                            ReplySuggestion = null
+                                        };
+                                        dbContext.GuestMessages.Add(guestMessage);
 
-                                            var guestResponse = new GuestResponse
-                                            {
-                                                GuestMessage = guestMessage,
-                                                Response = qaResponse?.Answer ?? "Sorry, no response from AI.",
-                                                CreatedAt = DateTime.UtcNow
-                                            };
-                                            dbContext.GuestResponses.Add(guestResponse);
+                                        var guestResponse = new GuestResponse
+                                        {
+                                            GuestMessage = guestMessage,
+                                            Response = qaResponse?.Answer ?? "Sorry, no response from AI.",
+                                            CreatedAt = DateTime.UtcNow
+                                        };
+                                        dbContext.GuestResponses.Add(guestResponse);
 
-                                            await dbContext.SaveChangesAsync();
+                                        await dbContext.SaveChangesAsync();
 
-                                            _logger.LogInformation("Saved guest message to database with ID: {Id}", guestMessage.Id);
-                                        }
+                                        _logger.LogInformation("Saved guest message to database with ID: {Id}", guestMessage.Id);
                                     }
                                 }
                                 catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
@@ -587,6 +592,9 @@ public class GmailNotificationConsumer : BackgroundService
         // Fallback to the first part's body if no text/plain part found
         return payload.Parts[0].Body?.Data != null ? DecodeBase64(payload.Parts[0].Body.Data) : string.Empty;
     }
+
+    [GeneratedRegex(@"@airbnb\.com\b", RegexOptions.IgnoreCase)]
+    private static partial Regex AirbnbRegex();
 
     // Helper method to decode Base64 safely
     private string DecodeBase64(string base64)
