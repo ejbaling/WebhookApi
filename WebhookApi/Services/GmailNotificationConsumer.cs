@@ -366,6 +366,8 @@ public partial class GmailNotificationConsumer : BackgroundService
                                     // Save to database
                                     // Determine sender and only save if from airbnb.com
                                     var fromHeader = message.Payload?.Headers?.FirstOrDefault(h => h.Name == "From")?.Value ?? string.Empty;
+                                    _logger.LogInformation("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@Email from header: {FromHeader}", fromHeader);
+
                                     bool isAirbnbSender = AirbnbRegex().IsMatch(fromHeader);
 
                                     if (isAirbnbSender)
