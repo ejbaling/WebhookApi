@@ -128,12 +128,7 @@ namespace WebhookApi.Services
                     response = await result.Content.ReadAsStringAsync();
 
                 if (!string.IsNullOrWhiteSpace(response))
-                {
-                    qaResponse = JsonSerializer.Deserialize<QaResponse>(response, new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    });
-                }
+                    qaResponse = JsonSerializer.Deserialize<QaResponse>(response, JsonOptions.Default);
             }
             
             await client.SendTextMessageAsync(

@@ -269,16 +269,17 @@ public class GmailNotificationConsumer : BackgroundService
                                     string subject = message.Payload?.Headers?.FirstOrDefault(h => h.Name == "Subject")?.Value ?? "(No Subject)";
                                     _logger.LogInformation("Email subject: {Subject}", subject);
 
+                                    var emailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
+
                                     // Extract date range from subject and check if today is in range
                                     bool? isInRange = IsCurrentDateInReservationRange(subject);
+                                    QaResponse? qaResponse = null;
+
                                     if (isInRange.HasValue)
                                     {
                                         _logger.LogInformation("Current date is {Status} the reservation range.", isInRange.Value ? "within" : "outside");
                                         if (isInRange.Value)
                                         {
-                                            // Save to db and forward to Telegram if in range
-                                            
-                                            var emailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
 
                                             Config? aiConfig = null;
                                             using (var scope = _scopeFactory.CreateScope()) 
@@ -287,7 +288,6 @@ public class GmailNotificationConsumer : BackgroundService
                                                 aiConfig = await dbContext.Configs.FirstOrDefaultAsync(c => c.Key == "AiEnabled");
                                             }
 
-                                            QaResponse? qaResponse = null;
                                             if (aiConfig?.Value == true)
                                             {
                                                 // Fetch relevant rules from DB first
@@ -310,17 +310,14 @@ public class GmailNotificationConsumer : BackgroundService
 
                                                 // Check if rules are empty and use fallback if needed
                                                 string rulesJson;
-                                                if (rulesData.Any())
+                                                if (rulesData.Count != 0)
                                                 {
                                                     var rulesObject = new { rules = rulesData };
                                                     rulesJson = JsonSerializer.Serialize(rulesObject);
-                                                    _logger.LogInformation("############################rulesJson: {rulesJson}", rulesJson);
 
                                                 }
                                                 else
-                                                {
                                                     rulesJson = HouseRules.RulesJson; // Fallback
-                                                }
 
                                                 var request = new
                                                 {
@@ -334,39 +331,7 @@ public class GmailNotificationConsumer : BackgroundService
                                                     response = await result.Content.ReadAsStringAsync();
 
                                                 if (!string.IsNullOrWhiteSpace(response))
-                                                {
-                                                    qaResponse = JsonSerializer.Deserialize<QaResponse>(response, new JsonSerializerOptions
-                                                    {
-                                                        PropertyNameCaseInsensitive = true
-                                                    });
-                                                }
-                                            }
-
-                                            // Save to database
-                                            using (var scope = _scopeFactory.CreateScope())
-                                            {
-                                                var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                                                var guestMessage = new GuestMessage
-                                                {
-                                                    Message = emailBody,
-                                                    Language = "en", // Placeholder, implement language detection if needed
-                                                    Category = "reservation", // Placeholder, implement category detection if needed
-                                                    Sentiment = "neutral", // Placeholder, implement sentiment analysis if needed
-                                                    ReplySuggestion = null // Placeholder, implement reply suggestion if needed
-                                                };
-                                                dbContext.GuestMessages.Add(guestMessage);
-
-                                                var guestResponse = new GuestResponse
-                                                {
-                                                    GuestMessage = guestMessage,
-                                                    Response = qaResponse?.Answer ?? "Sorry, no response from AI.",
-                                                    CreatedAt = DateTime.UtcNow
-                                                };
-                                                dbContext.GuestResponses.Add(guestResponse);
-
-                                                await dbContext.SaveChangesAsync();
-
-                                                _logger.LogInformation("Saved guest message to database with ID: {Id}", guestMessage.Id);
+                                                    qaResponse = JsonSerializer.Deserialize<QaResponse>(response, JsonOptions.Default);
                                             }
 
                                             // Forward to Telegram
@@ -395,6 +360,33 @@ public class GmailNotificationConsumer : BackgroundService
                                             }
 
                                             _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
+                                        }
+
+                                        // Save to database
+                                        using (var scope = _scopeFactory.CreateScope())
+                                        {
+                                            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                                            var guestMessage = new GuestMessage
+                                            {
+                                                Message = emailBody,
+                                                Language = "en", // Placeholder, implement language detection if needed
+                                                Category = "reservation", // Placeholder, implement category detection if needed
+                                                Sentiment = "neutral", // Placeholder, implement sentiment analysis if needed
+                                                ReplySuggestion = null // Placeholder, implement reply suggestion if needed
+                                            };
+                                            dbContext.GuestMessages.Add(guestMessage);
+
+                                            var guestResponse = new GuestResponse
+                                            {
+                                                GuestMessage = guestMessage,
+                                                Response = qaResponse?.Answer ?? "Sorry, no response from AI.",
+                                                CreatedAt = DateTime.UtcNow
+                                            };
+                                            dbContext.GuestResponses.Add(guestResponse);
+
+                                            await dbContext.SaveChangesAsync();
+
+                                            _logger.LogInformation("Saved guest message to database with ID: {Id}", guestMessage.Id);
                                         }
                                     }
                                 }
