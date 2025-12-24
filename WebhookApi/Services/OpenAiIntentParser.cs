@@ -24,7 +24,7 @@ namespace WebhookApi.Services
             _apiKey = config["AI:ApiKey"] ?? string.Empty;
             _model = config["AI:Model"] ?? "gpt-4o-mini";
 
-            _systemPrompt = "You are an intent parser that converts a user's natural language instruction into a JSON object with the following schema:\n{\"action\": string|null, \"parameters\": { string: string }, \"requireConfirm\": boolean}\nAllowed actions: shutdown_server, lights_off\nReturn ONLY valid JSON and nothing else. Examples:\n\"shutdown production server\" -> {\"action\":\"shutdown_server\",\"parameters\":{\"environment\":\"prod\"},\"requireConfirm\":true}\n\"turn off the lights\" -> {\"action\":\"lights_off\",\"parameters\":{},\"requireConfirm\":false}";
+            _systemPrompt = "You are an intent parser that converts a user's natural language instruction into a JSON object with the following schema:\n{\"action\": string|null, \"parameters\": { string: string }, \"requireConfirm\": boolean}\nAllowed actions: shutdown_server, lights_off, assess_guest\nReturn ONLY valid JSON and nothing else. Examples:\n\"shutdown production server\" -> {\"action\":\"shutdown_server\",\"parameters\":{\"environment\":\"prod\"},\"requireConfirm\":true}\n\"turn off the lights\" -> {\"action\":\"lights_off\",\"parameters\":{},\"requireConfirm\":false}\n\"Is John Doe a good guest?\" -> {\"action\":\"assess_guest\",\"parameters\":{\"name\":\"John Doe\"},\"requireConfirm\":false}\n\"Please assess guest Jane Smith based on messages\" -> {\"action\":\"assess_guest\",\"parameters\":{\"name\":\"Jane Smith\"},\"requireConfirm\":false}";
         }
 
         public async Task<IntentResult> ParseAsync(string text)

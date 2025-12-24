@@ -37,6 +37,7 @@ builder.Services.AddSingleton<TelegramBotClient>(sp =>
 // Action executors and registry
 builder.Services.AddSingleton<WebhookApi.Services.IActionExecutor, WebhookApi.Services.ShutdownExecutor>();
 builder.Services.AddSingleton<WebhookApi.Services.IActionExecutor, WebhookApi.Services.LightsOffExecutor>();
+builder.Services.AddSingleton<WebhookApi.Services.IActionExecutor, WebhookApi.Services.Actions.AssessGuestExecutor>();
 builder.Services.AddSingleton<WebhookApi.Services.IActionRegistry, WebhookApi.Services.ActionRegistry>();
 
 // Pending action store and semaphore store
@@ -60,6 +61,18 @@ builder.Services.AddScoped<IRuleRepository, RuleRepository>();
 
 // Add HttpClient support
 builder.Services.AddHttpClient();
+
+// Register OpenAI-backed guest classifier
+builder.Services.AddHttpClient<WebhookApi.Services.OpenAiGuestClassifier>(client =>
+{
+    // BaseAddress and key are configured via appsettings (AI:Endpoint, AI:ApiKey)
+    var endpoint = builder.Configuration["AI:Endpoint"] ?? "https://api.openai.com/";
+    client.BaseAddress = new Uri(endpoint);
+    var key = builder.Configuration["AI:ApiKey"];
+    if (!string.IsNullOrWhiteSpace(key))
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", key);
+});
+builder.Services.AddScoped<WebhookApi.Services.IGuestClassifier, WebhookApi.Services.OpenAiGuestClassifier>();
 
 var app = builder.Build();
 

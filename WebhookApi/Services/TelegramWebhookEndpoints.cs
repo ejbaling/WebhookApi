@@ -1,6 +1,9 @@
 using System.Collections.Concurrent;
 using System.Threading;
 using Telegram.Bot;
+using Microsoft.EntityFrameworkCore;
+using System.Linq;
+using Microsoft.Extensions.DependencyInjection;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
 using Microsoft.AspNetCore.Builder;
@@ -98,11 +101,28 @@ public static class TelegramWebhookEndpoints
 
                             try
                             {
+                                // If the action is an AI assessment, include the chatId so the executor can deliver the assessment
+                                if (string.Equals(pending!.ActionName, "assess_guest", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    if (!pending.Parameters.ContainsKey("chatId") && !pending.Parameters.ContainsKey("chat_id"))
+                                        pending.Parameters["chatId"] = chatId;
+                                }
+
                                 var result = await executor.ExecuteAsync(pending!.Parameters, CancellationToken.None);
                                 // remove only after success
                                 pendingStore.TryRemove(id, out _);
-                                await botClient.SendTextMessageAsync(chatId, $"✅ {result}");
-                                auditLog.Add($"[{DateTime.UtcNow}] Action {pending!.ActionName} confirmed by {fromId}");
+
+                                if (string.Equals(pending!.ActionName, "assess_guest", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    // Executor will send the full assessment to the chat; send a short confirmation here
+                                    await botClient.SendTextMessageAsync(chatId, "✅ Assessment completed.");
+                                    auditLog.Add($"[{DateTime.UtcNow}] Action {pending!.ActionName} confirmed by {fromId} (assessment sent)");
+                                }
+                                else
+                                {
+                                    await botClient.SendTextMessageAsync(chatId, $"✅ {result}");
+                                    auditLog.Add($"[{DateTime.UtcNow}] Action {pending!.ActionName} confirmed by {fromId}");
+                                }
                             }
                             catch (Exception ex)
                             {
@@ -178,9 +198,7 @@ public static class TelegramWebhookEndpoints
                             }
                         }
                         else
-                        {
                             await botClient.SendTextMessageAsync(chatId, "Unknown command.");
-                        }
                     }
                     else
                     {
@@ -218,9 +236,21 @@ public static class TelegramWebhookEndpoints
                             {
                                 // execute immediately
                                 var exec = intentExec!;
-                                var result = await exec.ExecuteAsync(intent.Parameters ?? new Dictionary<string,string>(), CancellationToken.None);
-                                await botClient.SendTextMessageAsync(chatId, result);
-                                auditLog.Add($"[{DateTime.UtcNow}] Intent {intent.Action} executed by {fromId}");
+                                if (string.Equals(intent.Action, "assess_guest", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    var parameters = intent.Parameters ?? new Dictionary<string,string>();
+                                    if (!parameters.ContainsKey("chatId") && !parameters.ContainsKey("chat_id"))
+                                        parameters["chatId"] = chatId;
+
+                                    var result = await exec.ExecuteAsync(parameters, CancellationToken.None);
+                                    auditLog.Add($"[{DateTime.UtcNow}] Intent {intent.Action} executed by {fromId} (assessment sent)");
+                                }
+                                else
+                                {
+                                    var result = await exec.ExecuteAsync(intent.Parameters ?? new Dictionary<string,string>(), CancellationToken.None);
+                                    await botClient.SendTextMessageAsync(chatId, result);
+                                    auditLog.Add($"[{DateTime.UtcNow}] Intent {intent.Action} executed by {fromId}");
+                                }
                             }
                         }
                     }
