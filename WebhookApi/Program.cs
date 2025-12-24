@@ -74,6 +74,9 @@ builder.Services.AddHttpClient<WebhookApi.Services.OpenAiGuestClassifier>(client
 });
 builder.Services.AddScoped<WebhookApi.Services.IGuestClassifier, WebhookApi.Services.OpenAiGuestClassifier>();
 
+// Register identifier extractor (OpenAI-backed)
+builder.Services.AddScoped<WebhookApi.Services.IIdentifierExtractor, WebhookApi.Services.OpenAiIdentifierExtractor>();
+
 var app = builder.Build();
 
 // Map Telegram webhook endpoints (refactored into service extension)

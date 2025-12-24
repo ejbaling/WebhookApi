@@ -372,15 +372,39 @@ public partial class GmailNotificationConsumer : BackgroundService
                                     if (isAirbnbSender)
                                     {
                                         emailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, true) : string.Empty;
+                                        // Use AI-backed extractor for Airbnb messages (fall back to regex extractor if not available)
                                         using var scope = _scopeFactory.CreateScope();
                                         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                                        IdentifierResult? aiIds = null;
+                                        try
+                                        {
+                                            var extractor = scope.ServiceProvider.GetService<IIdentifierExtractor>();
+                                            if (extractor != null)
+                                            {
+                                                aiIds = await extractor.ExtractAsync(subject + "\n" + emailBody, CancellationToken.None);
+                                                _logger.LogInformation("AI extracted identifiers: {@Ids}", aiIds);
+                                            }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            _logger.LogWarning(ex, "AI identifier extractor failed; falling back to regex extractor");
+                                        }
+
+                                        var (name, email, phone, bookingId, airbnbId) = (aiIds?.Name, aiIds?.Email, aiIds?.Phone, aiIds?.BookingId, aiIds?.AirbnbId);
+                                        var suggestion = name ?? bookingId ?? airbnbId ?? email ?? phone;
+
                                         var guestMessage = new GuestMessage
                                         {
                                             Message = emailBody,
                                             Language = "en",
                                             Category = "reservation",
                                             Sentiment = "neutral",
-                                            ReplySuggestion = null
+                                            ReplySuggestion = suggestion,
+                                            Name = name,
+                                            Email = email,
+                                            Phone = phone,
+                                            BookingId = bookingId,
+                                            AirbnbId = airbnbId
                                         };
                                         dbContext.GuestMessages.Add(guestMessage);
 
@@ -594,7 +618,7 @@ public partial class GmailNotificationConsumer : BackgroundService
         return payload.Parts[0].Body?.Data != null ? DecodeBase64(payload.Parts[0].Body.Data) : string.Empty;
     }
 
-    [GeneratedRegex(@"@airbnb\.com\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"@gmail\.com\b", RegexOptions.IgnoreCase)]
     private static partial Regex AirbnbRegex();
 
     // Helper method to decode Base64 safely
