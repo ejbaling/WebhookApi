@@ -41,7 +41,10 @@ namespace WebhookApi.Services.Actions
 
                 var matches = await db.GuestMessages
                     .AsNoTracking()
-                    .Where(g => g.Message != null && EF.Functions.ILike(g.Message, $"%{name}%"))
+                    .Where(g =>
+                        (g.Message != null && EF.Functions.ILike(g.Message, $"%{name}%")) ||
+                        (g.Name != null && EF.Functions.ILike(g.Name, $"%{name}%"))
+                    )
                     .OrderByDescending(g => g.Id)
                     .Take(20)
                     .Select(g => g.Message)
