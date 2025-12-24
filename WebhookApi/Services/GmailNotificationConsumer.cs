@@ -372,6 +372,7 @@ public partial class GmailNotificationConsumer : BackgroundService
 
                                     if (isAirbnbSender)
                                     {
+                                        emailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, true) : string.Empty;
                                         using var scope = _scopeFactory.CreateScope();
                                         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                                         var guestMessage = new GuestMessage
@@ -481,7 +482,7 @@ public partial class GmailNotificationConsumer : BackgroundService
             : result.Substring(0, maxLength - 3) + "...";
     }
 
-    private string ExtractMessage(string rawMessage, int maxLength = 160)
+    private string ExtractMessage(string rawMessage, int maxLength = 160, bool isGuestSection = false)
     {
         if (string.IsNullOrWhiteSpace(rawMessage))
             return string.Empty;
@@ -500,7 +501,6 @@ public partial class GmailNotificationConsumer : BackgroundService
             .ToList();
 
         var actualGuestLines = new List<string>();
-        var isGuestSection = false;
 
         // Step 2: Remove URLs (optional)
         for (int i = 0; i < lines.Count; i++)
