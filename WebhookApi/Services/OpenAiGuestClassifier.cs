@@ -91,9 +91,42 @@ namespace WebhookApi.Services
 
                 try
                 {
+                    // Clean up common wrappers from model output (markdown code fences, ```json ... ``` etc.)
+                    var cleaned = assistantText.Trim();
+
+                    // Remove leading/trailing triple-backtick fences
+                    if (cleaned.StartsWith("```"))
+                    {
+                        // If it's ```json or ``` we want the inner content
+                        var fenceEnd = cleaned.IndexOf("```", 3, StringComparison.Ordinal);
+                        if (fenceEnd > 3)
+                        {
+                            cleaned = cleaned.Substring(3, fenceEnd - 3).Trim();
+                        }
+                        else
+                        {
+                            // try to remove trailing fence if present at end
+                            if (cleaned.EndsWith("```"))
+                                cleaned = cleaned.Substring(3, cleaned.Length - 6).Trim();
+                        }
+                    }
+
+                    // If assistant wrapped in a single-line markdown block like `...`, strip backticks
+                    if (cleaned.StartsWith("`") && cleaned.EndsWith("`"))
+                        cleaned = cleaned.Trim('`').Trim();
+
+                    // Attempt to extract the first JSON object from the response (from first '{' to matching last '}')
+                    var firstBrace = cleaned.IndexOf('{');
+                    var lastBrace = cleaned.LastIndexOf('}');
+                    if (firstBrace >= 0 && lastBrace > firstBrace)
+                    {
+                        cleaned = cleaned.Substring(firstBrace, lastBrace - firstBrace + 1);
+                    }
+
                     var opt = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                    var parsed = JsonSerializer.Deserialize<GuestClassificationResult>(assistantText, opt);
+                    var parsed = JsonSerializer.Deserialize<GuestClassificationResult>(cleaned, opt);
                     if (parsed != null) return parsed;
+                    _logger.LogWarning("Classifier parsed null after cleaning. Raw: {Raw} Cleaned: {Cleaned}", assistantText, cleaned);
                 }
                 catch (Exception ex)
                 {
