@@ -18,6 +18,8 @@ services:
       - ASPNETCORE_URLS=http://+:80
       - RabbitMQ__HostName=rabbitmq
     restart: unless-stopped
+    volumes:
+      - ./Logs:/app/Logs:rw
     networks:
       - webhook-network
     depends_on:
