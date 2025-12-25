@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using WebhookApi.Data;
-using Telegram.Bot;
+ 
 
 namespace WebhookApi.Services.Actions
 {
@@ -17,13 +17,11 @@ namespace WebhookApi.Services.Actions
 
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<AssessGuestExecutor> _logger;
-        private readonly TelegramBotClient? _botClient;
 
-        public AssessGuestExecutor(IServiceScopeFactory scopeFactory, ILogger<AssessGuestExecutor> logger, TelegramBotClient? botClient = null)
+        public AssessGuestExecutor(IServiceScopeFactory scopeFactory, ILogger<AssessGuestExecutor> logger)
         {
             _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _botClient = botClient;
         }
 
         public async Task<string> ExecuteAsync(Dictionary<string, string> parameters, CancellationToken cancellationToken)
@@ -79,26 +77,7 @@ namespace WebhookApi.Services.Actions
 
                 var responseText = $"Assessment: {result.Label.ToUpper()} (score: {result.Score:F2})\nReason: {result.Reason}";
 
-                // Optional: send to Telegram if caller provided a chat id parameter
-                if (_botClient is not null)
-                {
-                    if (!parameters.TryGetValue("chatId", out var chatId) && !parameters.TryGetValue("chat_id", out chatId))
-                    {
-                        chatId = null;
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(chatId))
-                    {
-                        try
-                        {
-                            await _botClient.SendTextMessageAsync(chatId, responseText, cancellationToken: cancellationToken);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, "Failed to send assessment to Telegram chatId={ChatId}", chatId);
-                        }
-                    }
-                }
+                // Telegram sending removed; returning assessment text only.
 
                 return responseText;
             }

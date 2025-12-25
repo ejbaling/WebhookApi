@@ -243,6 +243,7 @@ public static class TelegramWebhookEndpoints
                                         parameters["chatId"] = chatId;
 
                                     var result = await exec.ExecuteAsync(parameters, CancellationToken.None);
+                                    await botClient.SendTextMessageAsync(chatId, result);
                                     auditLog.Add($"[{DateTime.UtcNow}] Intent {intent.Action} executed by {fromId} (assessment sent)");
                                 }
                                 else
