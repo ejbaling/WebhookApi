@@ -97,7 +97,7 @@ namespace WebhookApi.Services
                         continue;
                     }
 
-                    _logger.LogInformation("Tailscale API returned {DeviceCount} devices", devicesElement.GetArrayLength());
+                    // _logger.LogInformation("Tailscale API returned {DeviceCount} devices", devicesElement.GetArrayLength());
 
                     foreach (var device in devicesElement.EnumerateArray())
                     {
