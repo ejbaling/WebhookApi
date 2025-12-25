@@ -47,3 +47,4 @@ msbuild.wrn
 WebhookApi/appsettings.Development.json
 WebhookApi/appsettings.Production.json
 WebhookApi/credentials.json
+Logs/
