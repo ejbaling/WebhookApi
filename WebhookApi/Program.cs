@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Serilog;
+using System.IO;
 using RabbitMQ.Client;
 using Telegram.Bot;
 using WebhookApi.Services;
@@ -11,6 +12,17 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Ensure Logs directory exists (useful for container bind-mounts)
+try
+{
+    var logsDir = Path.Combine(AppContext.BaseDirectory, "Logs");
+    Directory.CreateDirectory(logsDir);
+}
+catch
+{
+    // ignore directory creation failures here; Serilog will log if it cannot write
+}
 
 // Configure Serilog from configuration early so startup logs are captured
 Log.Logger = new LoggerConfiguration()

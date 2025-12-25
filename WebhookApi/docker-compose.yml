@@ -17,7 +17,7 @@ services:
       - RabbitMQ__HostName=rabbitmq
     restart: unless-stopped
     volumes:
-      - ./Logs:/app/Logs
+      - ./Logs:/app/Logs:rw
     networks:
       - webhook-network
     depends_on:
