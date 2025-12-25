@@ -367,6 +367,9 @@ public partial class GmailNotificationConsumer : BackgroundService
                                     // Determine sender and only save if from airbnb.com
                                     var fromHeader = message.Payload?.Headers?.FirstOrDefault(h => h.Name == "From")?.Value ?? string.Empty;
 
+                                    // Log the from header via the application's logger (captured by Serilog)
+                                    _logger.LogInformation("Gmail From header: {FromHeader} MessageId:{MessageId}", fromHeader, messageId);
+
                                     bool isAirbnbSender = AirbnbRegex().IsMatch(fromHeader);
 
                                     if (isAirbnbSender)

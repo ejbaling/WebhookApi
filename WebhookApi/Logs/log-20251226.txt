@@ -1,0 +1,10 @@
+2025-12-26 00:31:41.170 +13:00 [Information] (/) Starting WebhookApi host
+2025-12-26 00:31:41.241 +13:00 [Information] (/) Gmail notification consumer is disabled via configuration.
+2025-12-26 00:31:41.244 +13:00 [Information] (/) Telegram Receiver Service is not enabled via configuration.
+2025-12-26 00:31:41.245 +13:00 [Information] (/) Ai Telegram is not enabled via configuration.
+2025-12-26 00:34:15.562 +13:00 [Information] (/) Stopping WebhookApi host
+2025-12-26 00:58:10.349 +13:00 [Information] (/) Starting WebhookApi host
+2025-12-26 00:58:10.411 +13:00 [Information] (/) Gmail notification consumer is disabled via configuration.
+2025-12-26 00:58:10.414 +13:00 [Information] (/) Telegram Receiver Service is not enabled via configuration.
+2025-12-26 00:58:10.417 +13:00 [Information] (/) Ai Telegram is not enabled via configuration.
+2025-12-26 00:58:15.073 +13:00 [Information] (/) Stopping WebhookApi host
