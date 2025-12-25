@@ -512,14 +512,14 @@ public partial class GmailNotificationConsumer : BackgroundService
 
         // Step 1: Remove email headers (From:, Date:, Subject:, To:)
         string[] headerPrefixes = { "From:", "Date:", "Subject:", "To:" };
-        string[] skipPrefixes = { "Reply", "You can also respond", "<", ".", "[image:"};
+        string[] skipPrefixes = { "Reply", "You can also respond", "<", ".", "[", "%", "For your protection and safety" };
 
         var lines = rawMessage.Split(new[] { '\r', '\n' }, StringSplitOptions.None)
             .Select(RemoveInvisibleCharacters)
             .Select(line => line.Trim())
             .Where(line =>
                 !string.IsNullOrWhiteSpace(line) &&
-                !headerPrefixes.Any(prefix => line.StartsWith(prefix)) &&
+                !headerPrefixes.Any(prefix => line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) &&
                 !skipPrefixes.Any(skip => line.StartsWith(skip, StringComparison.OrdinalIgnoreCase)))
             .ToList();
 
