@@ -395,7 +395,7 @@ public partial class GmailNotificationConsumer : BackgroundService
 
                                         var guestMessage = new GuestMessage
                                         {
-                                            Message = emailBody,
+                                            Message = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024) : string.Empty,
                                             Language = "en",
                                             Category = "reservation",
                                             Sentiment = "neutral",
