@@ -27,8 +27,13 @@ public class EmergencyAmiService : IEmergencyAmiService
         var amiUser = _config["Asterisk:User"] ?? string.Empty;
         var amiSecret = _config["Asterisk:Secret"] ?? string.Empty;
 
-        _logger.LogInformation("Triggering emergency AMI call to {PhoneNumber} via {AmiHost}:{AmiPort}", phoneNumber, amiHost, amiPort);
-        _logger.LogInformation("Using AMI credentials Username={AmiUser} Secret={AmiSecret}", amiUser, amiSecret);
+        // Read extensions from config (JSON array "Asterisk:Extensions" only)
+        var extensions = _config.GetSection("Asterisk:Extensions").Get<string[]>();
+        if (extensions == null || extensions.Length == 0)
+        {
+            _logger.LogWarning("No Asterisk:Extensions configured; falling back to default extension 105");
+            extensions = new[] { "105" };
+        }
 
         try
         {
@@ -41,28 +46,32 @@ public class EmergencyAmiService : IEmergencyAmiService
             using var reader = new StreamReader(stream, Encoding.ASCII);
             using var writer = new StreamWriter(stream, Encoding.ASCII) { NewLine = "\r\n", AutoFlush = true };
 
-            // Login
+            // Login once
             await writer.WriteLineAsync("Action: Login");
             await writer.WriteLineAsync($"Username: {amiUser}");
             await writer.WriteLineAsync($"Secret: {amiSecret}");
             await writer.WriteLineAsync(string.Empty);
 
-            // Small pause to allow server response
-            await Task.Delay(100, cts.Token);
+            // allow login response
+            await Task.Delay(150, cts.Token);
 
-            // Originate
-            await writer.WriteLineAsync("Action: Originate");
-            await writer.WriteLineAsync("Channel: Local/105@from-internal");
-            await writer.WriteLineAsync("Context: from-internal");
-            await writer.WriteLineAsync("Exten: 105");
-            await writer.WriteLineAsync("Priority: 1");
-            await writer.WriteLineAsync("CallerID: Airbnb Emergency <911>");
-            await writer.WriteLineAsync("Async: true");
-            await writer.WriteLineAsync(string.Empty);
+            foreach (var ext in extensions)
+            {
+                _logger.LogInformation("Originating to extension {Ext}", ext);
 
-            // Read a single response line (best-effort)
-            var response = await reader.ReadLineAsync();
-            _logger.LogInformation("AMI response first line: {Response}", response ?? "<none>");
+                await writer.WriteLineAsync("Action: Originate");
+                await writer.WriteLineAsync($"Channel: Local/{ext}@from-internal");
+                await writer.WriteLineAsync("Context: from-internal");
+                await writer.WriteLineAsync($"Exten: {ext}");
+                await writer.WriteLineAsync("Priority: 1");
+                await writer.WriteLineAsync("CallerID: Airbnb Emergency <911>");
+                await writer.WriteLineAsync("Async: true");
+                await writer.WriteLineAsync(string.Empty);
+
+                // best-effort read one response line per originate
+                var response = await reader.ReadLineAsync();
+                _logger.LogInformation("AMI response for {Ext} first line: {Response}", ext, response ?? "<none>");
+            }
         }
         catch (OperationCanceledException)
         {
