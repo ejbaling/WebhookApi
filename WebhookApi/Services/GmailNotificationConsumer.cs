@@ -269,7 +269,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                     string subject = message.Payload?.Headers?.FirstOrDefault(h => h.Name == "Subject")?.Value ?? "(No Subject)";
                                     _logger.LogInformation("Email subject: {Subject}", subject);
 
-                                    var emailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
+                                    var bookedGuestEmailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
 
                                     // Extract date range from subject and check if today is in range
                                     bool? isInRange = IsCurrentDateInReservationRange(subject);
@@ -295,7 +295,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                                 using (var scope = _scopeFactory.CreateScope())
                                                 {
                                                     var ruleRepository = scope.ServiceProvider.GetRequiredService<IRuleRepository>();
-                                                    relevantRules = await ruleRepository.GetRelevantRulesAsync(emailBody);
+                                                    relevantRules = await ruleRepository.GetRelevantRulesAsync(bookedGuestEmailBody);
                                                 }
 
                                                 // Group by category
@@ -321,7 +321,7 @@ public partial class GmailNotificationConsumer : BackgroundService
 
                                                 var request = new
                                                 {
-                                                    question = emailBody,
+                                                    question = bookedGuestEmailBody,
                                                     rules = rulesJson
                                                 };
 
@@ -343,7 +343,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                                 return;
                                             }
                                             
-                                            var telegramMessage = $"{ExtractSubject(subject)}: {emailBody}";
+                                            var telegramMessage = $"{ExtractSubject(subject)}: {bookedGuestEmailBody}";
                                             // Replace with your actual chatId and botClient instance
                                             var botClient = new TelegramBotClient(botToken);
                                             await botClient.SendTextMessageAsync(
@@ -374,7 +374,7 @@ public partial class GmailNotificationConsumer : BackgroundService
 
                                     if (isAirbnbSender)
                                     {
-                                        emailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, true) : string.Empty;
+                                        var airBnbEmailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, true) : string.Empty;
                                         // Use AI-backed extractor for Airbnb messages (fall back to regex extractor if not available)
                                         using var scope = _scopeFactory.CreateScope();
                                         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -384,7 +384,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                             var extractor = scope.ServiceProvider.GetService<IIdentifierExtractor>();
                                             if (extractor != null)
                                             {
-                                                aiIds = await extractor.ExtractAsync(subject + "\n" + emailBody, CancellationToken.None);
+                                                aiIds = await extractor.ExtractAsync(subject + "\n" + airBnbEmailBody, CancellationToken.None);
                                                 _logger.LogInformation("AI extracted identifiers: {@Ids}", aiIds);
                                             }
                                         }
@@ -398,7 +398,7 @@ public partial class GmailNotificationConsumer : BackgroundService
 
                                         var guestMessage = new GuestMessage
                                         {
-                                            Message = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024) : string.Empty,
+                                            Message = message.Payload != null ? (isInRange.HasValue && isInRange.Value ? bookedGuestEmailBody : ExtractMessage(GetEmailBody(message.Payload), 1024, true)) : string.Empty,
                                             Language = "en",
                                             Category = "reservation",
                                             Sentiment = "neutral",
@@ -508,7 +508,7 @@ public partial class GmailNotificationConsumer : BackgroundService
             : result.Substring(0, maxLength - 3) + "...";
     }
 
-    private string ExtractMessage(string rawMessage, int maxLength = 160, bool isGuestSection = false)
+    private string ExtractMessage(string rawMessage, int maxLength = 160, bool extractAll = false)
     {
         if (string.IsNullOrWhiteSpace(rawMessage))
             return string.Empty;
@@ -529,16 +529,17 @@ public partial class GmailNotificationConsumer : BackgroundService
         var actualGuestLines = new List<string>();
 
         // Step 2: Remove URLs (optional)
+        var isBookedGuestSection = false;
         for (int i = 0; i < lines.Count; i++)
         {
             lines[i] = Regex.Replace(lines[i], @"https?://[^\s]+", ""); // strip links
             if (lines[i].Equals("Booker", StringComparison.OrdinalIgnoreCase))
             {
-                isGuestSection = true;
+                isBookedGuestSection = true;
                 continue;
             }
 
-            if (isGuestSection)
+            if (isBookedGuestSection || extractAll)
             {
                 // Stop if we hit system markers
                 if (lines[i].StartsWith("REDWOOD", StringComparison.OrdinalIgnoreCase) ||
