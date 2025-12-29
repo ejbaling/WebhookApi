@@ -83,6 +83,9 @@ builder.Services.AddScoped<IRuleRepository, RuleRepository>();
 // Add HttpClient support
 builder.Services.AddHttpClient();
 
+// Emergency AMI service for originating calls to PBX
+builder.Services.AddSingleton<WebhookApi.Services.IEmergencyAmiService, WebhookApi.Services.EmergencyAmiService>();
+
 // Register OpenAI-backed guest classifier
 builder.Services.AddHttpClient<WebhookApi.Services.OpenAiGuestClassifier>(client =>
 {
@@ -163,7 +166,7 @@ try
     .WithName("ProcessGmailWebhook");
 
 
-    app.MapPost("sms/notifications", async (HttpContext context, IConnectionFactory connectionFactory, ILogger<Program> logger, IConfiguration config, IHttpClientFactory httpClientFactory) =>
+    app.MapPost("sms/notifications", async (HttpContext context, IConnectionFactory connectionFactory, ILogger<Program> logger, IConfiguration config, IHttpClientFactory httpClientFactory, IEmergencyAmiService amiService) =>
     {
         using var reader = new StreamReader(context.Request.Body);
         var requestBody = await reader.ReadToEndAsync();
@@ -212,6 +215,22 @@ try
         catch (JsonException)
         {
             messageToSend = "Invalid JSON in requestBody.";
+        }
+
+        // Emergency detection (trigger AMI) - detect before forwarding
+        bool containsHelp = !string.IsNullOrWhiteSpace(messageToSend) &&
+            messageToSend.IndexOf("help", StringComparison.OrdinalIgnoreCase) >= 0;
+
+        if (containsHelp)
+        {
+            logger.LogWarning("Emergency help keyword detected in SMS from {PhoneNumber}", phoneNumber);
+            var urgentText = $"🚨 EMERGENCY ALERT: Help request detected from {phoneNumber}. Message: {messageToSend}";
+
+            // immediate Telegram notification
+            await botClient.SendTextMessageAsync(new Telegram.Bot.Types.ChatId(chatId), text: urgentText, cancellationToken: CancellationToken.None);
+
+            // trigger AMI originate via service
+            await amiService.TriggerEmergencyAsync(phoneNumber, messageToSend, CancellationToken.None);
         }
 
         // Check if phoneNumber is blacklisted
