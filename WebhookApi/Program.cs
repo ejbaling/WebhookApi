@@ -217,9 +217,17 @@ try
             messageToSend = "Invalid JSON in requestBody.";
         }
 
+        // Check if phoneNumber is blacklisted
+        var blackListedPhoneNumbers = config.GetSection("BlackListedPhoneNumbers").Get<string[]>();
+        if (blackListedPhoneNumbers != null && blackListedPhoneNumbers.Contains(phoneNumber, StringComparer.OrdinalIgnoreCase))
+        {
+            logger.LogInformation("Phone number {PhoneNumber} is blacklisted. Not sending message to Telegram or SMS, nor calling Asterisk PBX.", phoneNumber);
+            return Results.Ok("Phone number is blacklisted.");
+        }
+
         // Emergency detection (trigger AMI) - detect before forwarding
         bool containsHelp = !string.IsNullOrWhiteSpace(messageToSend) &&
-            messageToSend.IndexOf("help", StringComparison.OrdinalIgnoreCase) >= 0;
+            messageToSend.Contains("help", StringComparison.OrdinalIgnoreCase);
 
         if (containsHelp)
         {
@@ -229,16 +237,8 @@ try
             // immediate Telegram notification
             await botClient.SendTextMessageAsync(new Telegram.Bot.Types.ChatId(chatId), text: urgentText, cancellationToken: CancellationToken.None);
 
-            // trigger AMI originate via service
+            // trigger AMI originate via service - call Asterisk PBX extensions
             await amiService.TriggerEmergencyAsync(phoneNumber, messageToSend, CancellationToken.None);
-        }
-
-        // Check if phoneNumber is blacklisted
-        var blackListedPhoneNumbers = config.GetSection("BlackListedPhoneNumbers").Get<string[]>();
-        if (blackListedPhoneNumbers != null && blackListedPhoneNumbers.Contains(phoneNumber, StringComparer.OrdinalIgnoreCase))
-        {
-            logger.LogInformation("Phone number {PhoneNumber} is blacklisted. Not sending message to Telegram or SMS.", phoneNumber);
-            return Results.Ok("Phone number is blacklisted.");
         }
 
         // Send Telegram message
