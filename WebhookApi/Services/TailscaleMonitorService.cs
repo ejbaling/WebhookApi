@@ -103,11 +103,11 @@ namespace WebhookApi.Services
                     {
                         string id = device.TryGetProperty("id", out var idProp) && idProp.ValueKind == JsonValueKind.String
                             ? idProp.GetString() ?? "<unknown>"
-                            : (device.TryGetProperty("name", out var n) ? n.GetString() ?? "<unknown>" : "<unknown>");
+                            : "<unknown>";
 
-                        string name = device.TryGetProperty("hostname", out var hn) && hn.ValueKind == JsonValueKind.String
-                            ? hn.GetString() ?? id
-                            : (device.TryGetProperty("name", out var n2) ? n2.GetString() ?? id : id);
+                        string name = device.TryGetProperty("name", out var nm) && nm.ValueKind == JsonValueKind.String
+                            ? nm.GetString() ?? "<unknown>"
+                            : "<unknown>";
 
                         if (allowedSet.Count > 0 && !allowedSet.Contains(name))
                             continue;
