@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 
 namespace WebhookApi.Services;
 
-public record IdentifierResult(string? Name, string? Email, string? Phone, string? BookingId, string? AirbnbId);
+public record IdentifierResult(string? Name, string? Email, string? Phone, string? BookingId, string? AirbnbId, string? Amount);
 
 public interface IIdentifierExtractor
 {
