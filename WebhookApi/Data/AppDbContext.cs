@@ -20,7 +20,7 @@ namespace WebhookApi.Data
             Rules = Set<Rule>();
             RuleCategories = Set<RuleCategory>();
             GuestAssessments = Set<GuestAssessment>();
-            GuestsPayments = Set<GuestPayment>();
+            GuestPayments = Set<GuestPayment>();
         }
 
         // DbSet properties are non-nullable and assigned in the constructor via Set<T>().
@@ -30,6 +30,6 @@ namespace WebhookApi.Data
         public DbSet<Rule> Rules { get; set; }
         public DbSet<RuleCategory> RuleCategories { get; set; }
         public DbSet<GuestAssessment> GuestAssessments { get; set; }
-        public DbSet<GuestPayment> GuestsPayments { get; set; }
+        public DbSet<GuestPayment> GuestPayments { get; set; }
     }
 }
