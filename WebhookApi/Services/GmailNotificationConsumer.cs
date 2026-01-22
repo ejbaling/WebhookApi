@@ -446,7 +446,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                                 Amount = parsedAmount ?? 0,
                                                 CreatedAt = DateTime.UtcNow
                                             };
-                                            dbContext.GuestsPayments.Add(guestPayment);
+                                            dbContext.GuestPayments.Add(guestPayment);
                                         }
 
                                         await dbContext.SaveChangesAsync();
