@@ -377,10 +377,6 @@ public partial class GmailNotificationConsumer : BackgroundService
                                     // Process Airbnb messages or the test sender email for local testing
                                     if (isAirbnbSender || isTestSender)
                                     {
-                                        if (isTestSender)
-                                        {
-                                            _logger.LogInformation("Processing test sender email for testing: {FromHeader}", fromHeader);
-                                        }
                                         var airBnbEmailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, true) : string.Empty;
                                         // Use AI-backed extractor for Airbnb messages (fall back to regex extractor if not available)
                                         using var scope = _scopeFactory.CreateScope();
