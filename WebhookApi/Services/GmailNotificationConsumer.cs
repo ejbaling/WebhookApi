@@ -377,7 +377,9 @@ public partial class GmailNotificationConsumer : BackgroundService
                                     // Process Airbnb messages or the test sender email for local testing
                                     if (isAirbnbSender || isTestSender)
                                     {
-                                        var airBnbEmailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, true) : string.Empty;
+                                        var isPayout = subject.Contains("payout", StringComparison.OrdinalIgnoreCase) ||
+                                                          subject.Contains("payment", StringComparison.OrdinalIgnoreCase);
+                                        var airBnbEmailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, !isPayout) : string.Empty;
                                         // Use AI-backed extractor for Airbnb messages (fall back to regex extractor if not available)
                                         using var scope = _scopeFactory.CreateScope();
                                         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -401,7 +403,7 @@ public partial class GmailNotificationConsumer : BackgroundService
 
                                         var guestMessage = new GuestMessage
                                         {
-                                            Message = message.Payload != null ? (isInRange.HasValue && isInRange.Value ? bookedGuestEmailBody : ExtractMessage(GetEmailBody(message.Payload), 1024, true)) : string.Empty,
+                                            Message = message.Payload != null ? (isInRange.HasValue && isInRange.Value ? bookedGuestEmailBody : airBnbEmailBody) : string.Empty,
                                             Language = "en",
                                             Category = "reservation",
                                             Sentiment = "neutral",
