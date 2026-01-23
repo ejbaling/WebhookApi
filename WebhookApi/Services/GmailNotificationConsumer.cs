@@ -396,8 +396,8 @@ public partial class GmailNotificationConsumer : BackgroundService
                                             _logger.LogWarning(ex, "AI identifier extractor failed; falling back to regex extractor");
                                         }
 
-                                        var (name, guestName, hostName, email, phone, bookingId, airbnbId, amount) = (aiIds?.Name, aiIds?.GuestName, aiIds?.HostName, aiIds?.Email, aiIds?.Phone, aiIds?.BookingId, aiIds?.AirbnbId, aiIds?.Amount);
-                                        var suggestion = guestName ?? name ?? bookingId ?? airbnbId ?? email ?? phone ?? amount;
+                                        var (name, email, phone, bookingId, airbnbId, amount) = (aiIds?.Name, aiIds?.Email, aiIds?.Phone, aiIds?.BookingId, aiIds?.AirbnbId, aiIds?.Amount);
+                                        var suggestion = name ?? bookingId ?? airbnbId ?? email ?? phone ?? amount;
 
                                         var guestMessage = new GuestMessage
                                         {
@@ -406,7 +406,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                             Category = "reservation",
                                             Sentiment = "neutral",
                                             ReplySuggestion = suggestion,
-                                            Name = guestName ?? name,
+                                            Name = name,
                                             Email = email,
                                             Phone = phone,
                                             BookingId = bookingId,
@@ -445,7 +445,7 @@ public partial class GmailNotificationConsumer : BackgroundService
 
                                             var guestPayment = new GuestPayment
                                             {
-                                                FullName = guestName ?? name ?? "Unknown",
+                                                FullName = name ?? "Unknown",
                                                 Amount = parsedAmount ?? 0,
                                                 CreatedAt = DateTime.UtcNow
                                             };
