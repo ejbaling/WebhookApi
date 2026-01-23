@@ -34,18 +34,12 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
             return new IdentifierResult(null, null, null, null, null, null, null, null);
         }
 
-           var prompt = "Extract the following fields from the message into JSON: name, guestName, hostName, email, phone, bookingId, airbnbId, amount.\n"
-               + "Important rules:\n"
-               + "1) When the message contains booking or reservation information (dates, listing names, 'Total paid', 'Home •', 'Reservation', 'Total paid:'), the 'guestName' MUST be the traveler who booked the reservation. Set 'name' to the same value as 'guestName'. If both guest and host appear, set 'hostName' to the recipient/host.\n"
-               + "2) If only one personal name appears but the message clearly refers to a payout/recipient AND includes reservation details, treat the traveler name that appears in the reservation section as the guest. Prefer the traveler/guest when in doubt.\n"
-               + "3) Return 'amount' as the full currency string (for example: '₱2,483.65 PHP').\n"
-               + "4) ALWAYS return ONLY valid JSON and NOTHING else, with keys exactly: name, guestName, hostName, email, phone, bookingId, airbnbId, amount. Use null for missing fields.\n"
-               + "Example:\n"
-               + "MESSAGE:\n"
-               + "₱4,058.88 PHP was sent today\n\nYour money was sent on January 23 and should arrive by January 30, 2026.\n\nView earnings\nBank account\n\nEmmanuel Jomer Baling, 4925 (PHP)\n\nPayouts received by your bank on weekends or holidays will be processed on the next business day.\n\nAirbnb account ID\n\n332328139\n\nDetails\n\nFaith Angeli Galera\n\n₱4,058.88 PHP\n\nHome • 01/22/2026 - 01/26/2026\n\nRedwood Iloilo Kauri holiday room (1170641659087583828)\n\nHMJXQXND5T\n\nTotal paid:\n\n₱4,058.88 PHP\n\nExpected JSON:\n"
-               + "{\"name\":\"Faith Angeli Galera\",\"guestName\":\"Faith Angeli Galera\",\"hostName\":\"Emmanuel Jomer Baling\",\"email\":null,\"phone\":null,\"bookingId\":null,\"airbnbId\":null,\"amount\":\"₱4,058.88 PHP\"}\n"
-               + "End of instruction.\n\n"
-               + "MESSAGE:\n" + text;
+        var prompt = "Extract the following fields from the message: name, guestName, hostName, email, phone, bookingId, airbnbId, amount.\n"
+             + "When the message includes reservation/booking details (dates, listing, 'Total paid', 'Home •', etc.), prefer the guest/traveler's name for `name` and `guestName`. If both host and guest names appear, populate `hostName` with the host/recipient name and `guestName` with the traveler.\n"
+             + "Return ONLY valid JSON with keys: name, guestName, hostName, email, phone, bookingId, airbnbId, amount. Use null when missing.\n"
+             + "If present, return `amount` as the full currency string (for example: '₱2,483.65 PHP').\n"
+             + "Return only the JSON object and nothing else.\n\n"
+             + "MESSAGE:\n" + text;
 
         var payload = new
         {
