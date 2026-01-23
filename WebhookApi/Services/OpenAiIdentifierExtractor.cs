@@ -31,14 +31,15 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
         if (string.IsNullOrWhiteSpace(_apiKey))
         {
             _logger.LogWarning("AI:ApiKey not configured; returning empty identifiers.");
-            return new IdentifierResult(null, null, null, null, null, null);
+            return new IdentifierResult(null, null, null, null, null, null, null, null);
         }
 
-        var prompt = "Extract the following fields from the message: name, email, phone, bookingId, airbnbId, amount.\n"
-                 + "Return ONLY valid JSON with keys: name, email, phone, bookingId, airbnbId, amount. Use null when missing.\n"
-                 + "If present, return `amount` as the full currency string (for example: '₱2,483.65 PHP').\n"
-                 + "Return only the JSON object and nothing else.\n\n"
-                 + "MESSAGE:\n" + text;
+        var prompt = "Extract the following fields from the message: name, guestName, hostName, email, phone, bookingId, airbnbId, amount.\n"
+             + "When the message includes reservation/booking details (dates, listing, 'Total paid', 'Home •', etc.), prefer the guest/traveler's name for `name` and `guestName`. If both host and guest names appear, populate `hostName` with the host/recipient name and `guestName` with the traveler.\n"
+             + "Return ONLY valid JSON with keys: name, guestName, hostName, email, phone, bookingId, airbnbId, amount. Use null when missing.\n"
+             + "If present, return `amount` as the full currency string (for example: '₱2,483.65 PHP').\n"
+             + "Return only the JSON object and nothing else.\n\n"
+             + "MESSAGE:\n" + text;
 
         var payload = new
         {
@@ -63,7 +64,7 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                 {
                     var body = await resp.Content.ReadAsStringAsync(cancellationToken);
                     _logger.LogWarning("Identifier extractor API returned {Status}: {Body}", resp.StatusCode, body);
-                    return new IdentifierResult(null, null, null, null, null, null);
+                    return new IdentifierResult(null, null, null, null, null, null, null, null);
                 }
 
             var bodyStream = await resp.Content.ReadAsStreamAsync(cancellationToken);
@@ -87,7 +88,7 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
             if (string.IsNullOrWhiteSpace(assistantText))
             {
                 _logger.LogWarning("Identifier extractor returned empty completion content");
-                return new IdentifierResult(null, null, null, null, null, null);
+                return new IdentifierResult(null, null, null, null, null, null, null, null);
             }
 
             // Clean code fences/backticks
@@ -116,7 +117,16 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
             {
                 var opt = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                 var parsed = JsonSerializer.Deserialize<IdentifierResult>(cleaned, opt);
-                if (parsed != null) return parsed;
+                if (parsed != null)
+                {
+                    // Ensure `Name` refers to the guest when `guestName` is present.
+                    if (!string.IsNullOrWhiteSpace(parsed.GuestName))
+                    {
+                        parsed = parsed with { Name = parsed.GuestName };
+                    }
+
+                    return parsed;
+                }
             }
             catch (Exception ex)
             {
@@ -128,6 +138,6 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
             _logger.LogError(ex, "Identifier extraction request failed");
         }
 
-        return new IdentifierResult(null, null, null, null, null, null);
+                return new IdentifierResult(null, null, null, null, null, null, null, null);
     }
 }
