@@ -667,50 +667,73 @@ public partial class GmailNotificationConsumer : BackgroundService
     {
         try
         {
-            // Combine subject and body lines for scanning
             var combined = (subject ?? string.Empty) + "\n" + (body ?? string.Empty);
             var lines = combined.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(l => l.Trim())
                 .Where(l => !string.IsNullOrWhiteSpace(l))
                 .ToList();
 
-            // Candidate pattern: at least two words, each starting with uppercase letter
-            var namePattern = new Regex("^[A-Z][\\p{L}'\\-]+(?: [A-Z][\\p{L}'\\-]+)+$");
+            string? CleanCandidate(string raw)
+            {
+                // remove parenthetical/bracketed content and trailing punctuation
+                var s = Regex.Replace(raw, "[\\(\\[].*?[\\)\\]]", "").Trim();
+                s = s.Trim().TrimEnd(',', ':', '.', '\u00A0');
+                return s;
+            }
 
-            // 1) Look for a 'Details' marker and take the next non-empty line
+            bool LooksLikeName(string? s)
+            {
+                if (string.IsNullOrWhiteSpace(s)) return false;
+                // must contain at least two alphabetic words
+                var tokens = s.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                var alphaTokens = tokens.Where(t => t.Any(char.IsLetter)).ToList();
+                if (alphaTokens.Count < 2 || alphaTokens.Count > 5) return false;
+
+                // require most tokens to contain letters and not be long sequences of digits
+                if (alphaTokens.Any(t => Regex.IsMatch(t, "\\d{3,}"))) return false;
+
+                // prefer tokens that start with uppercase letter, but accept if at least one does
+                if (alphaTokens.Count(t => char.IsUpper(t[0])) == 0) return false;
+
+                // sanity: ensure overall length not absurd
+                if (s.Length > 120) return false;
+
+                return true;
+            }
+
+            // 1) Look for a 'Details' marker and take the next candidate lines
             for (int i = 0; i < lines.Count; i++)
             {
                 if (lines[i].StartsWith("Details", StringComparison.OrdinalIgnoreCase) && i + 1 < lines.Count)
                 {
-                    var candidate = lines[i + 1].Trim();
-                    if (namePattern.IsMatch(candidate)) return candidate;
-                    // maybe two lines after
+                    var candidate = CleanCandidate(lines[i + 1]);
+                    if (LooksLikeName(candidate)) return candidate;
                     if (i + 2 < lines.Count)
                     {
-                        candidate = lines[i + 2].Trim();
-                        if (namePattern.IsMatch(candidate)) return candidate;
+                        candidate = CleanCandidate(lines[i + 2]);
+                        if (LooksLikeName(candidate)) return candidate;
                     }
                 }
             }
 
-            // 2) Look for a currency/amount line (e.g., contains ₱ or words 'Total paid') and take the previous non-empty line
+            // 2) Look for a currency/amount line and take the previous non-empty cleaned line
             for (int i = 0; i < lines.Count; i++)
             {
                 if (Regex.IsMatch(lines[i], @"[₱$€]|Total paid|Total Paid", RegexOptions.IgnoreCase))
                 {
-                    // previous non-empty line
                     if (i - 1 >= 0)
                     {
-                        var candidate = lines[i - 1].Trim();
-                        if (namePattern.IsMatch(candidate)) return candidate;
+                        var candidate = CleanCandidate(lines[i - 1]);
+                        if (LooksLikeName(candidate)) return candidate;
                     }
                 }
             }
 
-            // 3) Scan all lines for a name-like pattern and return first match
+            // 3) Scan all lines, preferring short lines with two-to-four words
             foreach (var line in lines)
             {
-                if (namePattern.IsMatch(line)) return line;
+                var candidate = CleanCandidate(line);
+                if (LooksLikeName(candidate)) return candidate;
             }
 
             return null;
