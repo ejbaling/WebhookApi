@@ -397,13 +397,6 @@ public partial class GmailNotificationConsumer : BackgroundService
                                         }
 
                                         var (name, guestName, hostName, email, phone, bookingId, airbnbId, amount) = (aiIds?.Name, aiIds?.GuestName, aiIds?.HostName, aiIds?.Email, aiIds?.Phone, aiIds?.BookingId, aiIds?.AirbnbId, aiIds?.Amount);
-                                        // Fallback: attempt to extract guest name from subject/body when AI didn't provide one
-                                        var fallbackGuestName = ExtractGuestNameFromBody(subject, airBnbEmailBody);
-                                        if (string.IsNullOrWhiteSpace(guestName) && string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(fallbackGuestName))
-                                        {
-                                            guestName = fallbackGuestName;
-                                        }
-
                                         var suggestion = guestName ?? name ?? bookingId ?? airbnbId ?? email ?? phone ?? amount;
 
                                         var guestMessage = new GuestMessage
@@ -660,65 +653,6 @@ public partial class GmailNotificationConsumer : BackgroundService
 
         // Fallback to the first part's body if no text/plain part found
         return payload.Parts[0].Body?.Data != null ? DecodeBase64(payload.Parts[0].Body.Data) : string.Empty;
-    }
-
-    // Heuristic fallback to extract a guest full name from subject or email body when AI fails
-    private static string? ExtractGuestNameFromBody(string subject, string body)
-    {
-        try
-        {
-            // Combine subject and body lines for scanning
-            var combined = (subject ?? string.Empty) + "\n" + (body ?? string.Empty);
-            var lines = combined.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(l => l.Trim())
-                .Where(l => !string.IsNullOrWhiteSpace(l))
-                .ToList();
-
-            // Candidate pattern: at least two words, each starting with uppercase letter
-            var namePattern = new Regex("^[A-Z][\\p{L}'\\-]+(?: [A-Z][\\p{L}'\\-]+)+$");
-
-            // 1) Look for a 'Details' marker and take the next non-empty line
-            for (int i = 0; i < lines.Count; i++)
-            {
-                if (lines[i].StartsWith("Details", StringComparison.OrdinalIgnoreCase) && i + 1 < lines.Count)
-                {
-                    var candidate = lines[i + 1].Trim();
-                    if (namePattern.IsMatch(candidate)) return candidate;
-                    // maybe two lines after
-                    if (i + 2 < lines.Count)
-                    {
-                        candidate = lines[i + 2].Trim();
-                        if (namePattern.IsMatch(candidate)) return candidate;
-                    }
-                }
-            }
-
-            // 2) Look for a currency/amount line (e.g., contains ₱ or words 'Total paid') and take the previous non-empty line
-            for (int i = 0; i < lines.Count; i++)
-            {
-                if (Regex.IsMatch(lines[i], @"[₱$€]|Total paid|Total Paid", RegexOptions.IgnoreCase))
-                {
-                    // previous non-empty line
-                    if (i - 1 >= 0)
-                    {
-                        var candidate = lines[i - 1].Trim();
-                        if (namePattern.IsMatch(candidate)) return candidate;
-                    }
-                }
-            }
-
-            // 3) Scan all lines for a name-like pattern and return first match
-            foreach (var line in lines)
-            {
-                if (namePattern.IsMatch(line)) return line;
-            }
-
-            return null;
-        }
-        catch
-        {
-            return null;
-        }
     }
 
     [GeneratedRegex(@"@airbnb\.com\b", RegexOptions.IgnoreCase)]
