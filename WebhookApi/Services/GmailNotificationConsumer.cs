@@ -563,6 +563,7 @@ public partial class GmailNotificationConsumer : BackgroundService
 
         // Step 2: Remove URLs (optional)
         var isBookedGuestSection = false;
+        var isPaymentDetailSection = false;
         for (int i = 0; i < lines.Count; i++)
         {
             lines[i] = Regex.Replace(lines[i], @"https?://[^\s]+", ""); // strip links
@@ -572,7 +573,13 @@ public partial class GmailNotificationConsumer : BackgroundService
                 continue;
             }
 
-            if (isBookedGuestSection || extractAll)
+            if (lines[i].Equals("Details", StringComparison.OrdinalIgnoreCase))
+            {
+                isPaymentDetailSection = true;
+                continue;
+            }
+
+            if (isBookedGuestSection || isPaymentDetailSection || extractAll)
             {
                 // Stop if we hit system markers
                 if (lines[i].StartsWith("REDWOOD", StringComparison.OrdinalIgnoreCase) ||
@@ -580,7 +587,8 @@ public partial class GmailNotificationConsumer : BackgroundService
                     lines[i].StartsWith("Guests", StringComparison.OrdinalIgnoreCase) ||
                     lines[i].StartsWith("Get the app", StringComparison.OrdinalIgnoreCase) ||
                     lines[i].StartsWith("Airbnb", StringComparison.OrdinalIgnoreCase) ||
-                    lines[i].StartsWith("Update your email preferences", StringComparison.OrdinalIgnoreCase))
+                    lines[i].StartsWith("Update your email preferences", StringComparison.OrdinalIgnoreCase) ||
+                    lines[i].StartsWith("Get help with payouts", StringComparison.OrdinalIgnoreCase))
                     break;
 
                 actualGuestLines.Add(lines[i]);
