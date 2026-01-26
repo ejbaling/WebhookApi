@@ -392,7 +392,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                                 sectionIndex++;
                                                 var preview = section.Length > 200 ? section.Substring(0, 200) + "..." : section;
                                                 _logger.LogDebug("Processing payout section {Index}/{Total} for MessageId={MessageId}: {Preview}", sectionIndex, sections.Count, messageId, preview);
-                                                await HandleAirbnbExtractionAndSaveAsync(subject, section, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId);
+                                                // await HandleAirbnbExtractionAndSaveAsync(subject, section, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId);
                                             }
                                         }
                                         else
