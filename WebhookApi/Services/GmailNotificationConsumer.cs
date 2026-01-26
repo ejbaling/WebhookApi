@@ -380,13 +380,20 @@ public partial class GmailNotificationConsumer : BackgroundService
                                         var isPayout = subject.Contains("payout", StringComparison.OrdinalIgnoreCase) ||
                                                           subject.Contains("payment", StringComparison.OrdinalIgnoreCase);
                                         var airBnbEmailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, !isPayout) : string.Empty;
+                                        _logger.LogDebug("Airbnb email body for MessageId={MessageId}: {AirbnbBody}", messageId, airBnbEmailBody);
 
                                         if (isPayout && CountPayouts(airBnbEmailBody) > 1)
                                         {
                                             var sections = SplitPayoutSections(airBnbEmailBody);
                                             _logger.LogInformation("Splitting Airbnb payout email into {Count} sections for message {MessageId}", sections.Count, messageId);
+                                            int sectionIndex = 0;
                                             foreach (var section in sections)
+                                            {
+                                                sectionIndex++;
+                                                var preview = section.Length > 200 ? section.Substring(0, 200) + "..." : section;
+                                                _logger.LogDebug("Processing payout section {Index}/{Total} for MessageId={MessageId}: {Preview}", sectionIndex, sections.Count, messageId, preview);
                                                 await HandleAirbnbExtractionAndSaveAsync(subject, section, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId);
+                                            }
                                         }
                                         else
                                         {
