@@ -392,13 +392,22 @@ public partial class GmailNotificationConsumer : BackgroundService
                                         {
                                             var sections = SplitPayoutSections(airBnbEmailBody);
                                             _logger.LogInformation("Splitting Airbnb payout email into {Count} sections for message {MessageId}", sections.Count, messageId);
-                                            int sectionIndex = 0;
-                                            foreach (var section in sections)
+
+                                            // Safety: if the splitter produced too many sections, skip processing to avoid spurious work
+                                            if (sections.Count > 4)
                                             {
-                                                sectionIndex++;
-                                                var preview = section.Length > 200 ? section.Substring(0, 200) + "..." : section;
-                                                _logger.LogInformation("Processing payout section {Index}/{Total} for MessageId={MessageId}: {Preview}", sectionIndex, sections.Count, messageId, preview);
-                                                // await HandleAirbnbExtractionAndSaveAsync(subject, section, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId);
+                                                _logger.LogWarning("Detected {Count} payout sections for MessageId={MessageId} which exceeds configured limit of 4; skipping processing.", sections.Count, messageId);
+                                            }
+                                            else
+                                            {
+                                                int sectionIndex = 0;
+                                                foreach (var section in sections)
+                                                {
+                                                    sectionIndex++;
+                                                    var preview = section.Length > 200 ? section.Substring(0, 200) + "..." : section;
+                                                    _logger.LogInformation("Processing payout section {Index}/{Total} for MessageId={MessageId}: {Preview}", sectionIndex, sections.Count, messageId, preview);
+                                                    await HandleAirbnbExtractionAndSaveAsync(subject, section, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId);
+                                                }
                                             }
                                         }
                                         else
@@ -864,7 +873,24 @@ public partial class GmailNotificationConsumer : BackgroundService
             if (nameLine < 0) nameLine = amtLine; // no preceding non-empty line
 
             int startLine = nameLine;
-            int endLine = (idx + 1) < amountLineIndices.Count ? amountLineIndices[idx + 1] - 1 : lines.Count - 1;
+            int tentativeEndLine = (idx + 1) < amountLineIndices.Count ? amountLineIndices[idx + 1] - 1 : lines.Count - 1;
+
+            // Terminate early if we encounter a footer marker like "Redwood" or the next section's amount appearing earlier than expected
+            int endLine = tentativeEndLine;
+            for (int j = amtLine + 1; j <= tentativeEndLine; j++)
+            {
+                if (lines[j].IndexOf("Redwood", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    endLine = Math.Max(amtLine, j - 1);
+                    break;
+                }
+
+                if (AmountRegex.IsMatch(lines[j]))
+                {
+                    endLine = Math.Max(amtLine, j - 1);
+                    break;
+                }
+            }
 
             var segLines = lines.Skip(startLine).Take(endLine - startLine + 1).ToArray();
             var seg = string.Join("\n", segLines).Trim();
