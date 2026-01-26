@@ -833,18 +833,41 @@ public partial class GmailNotificationConsumer : BackgroundService
         var matches = AmountRegex.Matches(searchArea);
         if (matches.Count == 0)
         {
-            // Nothing to split; return the whole area as single section
             var single = searchArea.Trim();
             if (!string.IsNullOrEmpty(single)) sections.Add(single);
             return sections;
         }
 
-        // For N matches produce N sections anchored at each amount: [match[0].Index .. match[1].Index), [match[1].Index .. match[2].Index), ..., [match[last].Index .. end)
-        for (int i = 0; i < matches.Count; i++)
+        // Split by lines and build sections that include the nearest previous non-empty line (likely the guest name)
+        var lines = Regex.Split(searchArea, "\r\n|\n|\r").ToList();
+        var amountLineIndices = new List<int>();
+        for (int i = 0; i < lines.Count; i++)
         {
-            int start = matches[i].Index; // start at the amount itself
-            int end = (i + 1) < matches.Count ? matches[i + 1].Index : searchArea.Length;
-            var seg = searchArea.Substring(start, end - start).Trim();
+            if (AmountRegex.IsMatch(lines[i]))
+                amountLineIndices.Add(i);
+        }
+
+        if (amountLineIndices.Count == 0)
+        {
+            var single = searchArea.Trim();
+            if (!string.IsNullOrEmpty(single)) sections.Add(single);
+            return sections;
+        }
+
+        for (int idx = 0; idx < amountLineIndices.Count; idx++)
+        {
+            int amtLine = amountLineIndices[idx];
+
+            // find previous non-empty line to treat as name (fallback to amtLine if none)
+            int nameLine = amtLine - 1;
+            while (nameLine >= 0 && string.IsNullOrWhiteSpace(lines[nameLine])) nameLine--;
+            if (nameLine < 0) nameLine = amtLine; // no preceding non-empty line
+
+            int startLine = nameLine;
+            int endLine = (idx + 1) < amountLineIndices.Count ? amountLineIndices[idx + 1] - 1 : lines.Count - 1;
+
+            var segLines = lines.Skip(startLine).Take(endLine - startLine + 1).ToArray();
+            var seg = string.Join("\n", segLines).Trim();
             if (!string.IsNullOrWhiteSpace(seg)) sections.Add(seg);
         }
 
