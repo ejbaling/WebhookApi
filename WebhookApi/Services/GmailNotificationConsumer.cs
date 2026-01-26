@@ -380,83 +380,18 @@ public partial class GmailNotificationConsumer : BackgroundService
                                         var isPayout = subject.Contains("payout", StringComparison.OrdinalIgnoreCase) ||
                                                           subject.Contains("payment", StringComparison.OrdinalIgnoreCase);
                                         var airBnbEmailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, !isPayout) : string.Empty;
-                                        // Use AI-backed extractor for Airbnb messages (fall back to regex extractor if not available)
-                                        using var scope = _scopeFactory.CreateScope();
-                                        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                                        IdentifierResult? aiIds = null;
-                                        try
+
+                                        if (isPayout && CountPayouts(airBnbEmailBody) > 1)
                                         {
-                                            var extractor = scope.ServiceProvider.GetService<IIdentifierExtractor>();
-                                            if (extractor != null)
-                                            {
-                                                aiIds = await extractor.ExtractAsync(subject + "\n" + airBnbEmailBody, CancellationToken.None);
-                                                _logger.LogInformation("AI extracted identifiers: {@Ids}", aiIds);
-                                            }
+                                            var sections = SplitPayoutSections(airBnbEmailBody);
+                                            _logger.LogInformation("Splitting Airbnb payout email into {Count} sections for message {MessageId}", sections.Count, messageId);
+                                            foreach (var section in sections)
+                                                await HandleAirbnbExtractionAndSaveAsync(subject, section, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId);
                                         }
-                                        catch (Exception ex)
+                                        else
                                         {
-                                            _logger.LogWarning(ex, "AI identifier extractor failed; falling back to regex extractor");
+                                            await HandleAirbnbExtractionAndSaveAsync(subject, airBnbEmailBody, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId);
                                         }
-
-                                        var (name, email, phone, bookingId, airbnbId, amount) = (aiIds?.Name, aiIds?.Email, aiIds?.Phone, aiIds?.BookingId, aiIds?.AirbnbId, aiIds?.Amount);
-                                        var suggestion = name ?? bookingId ?? airbnbId ?? email ?? phone ?? amount;
-
-                                        var guestMessage = new GuestMessage
-                                        {
-                                            Message = message.Payload != null ? (isInRange.HasValue && isInRange.Value ? bookedGuestEmailBody : airBnbEmailBody) : string.Empty,
-                                            Language = "en",
-                                            Category = "reservation",
-                                            Sentiment = "neutral",
-                                            ReplySuggestion = suggestion,
-                                            Name = name,
-                                            Email = email,
-                                            Phone = phone,
-                                            BookingId = bookingId,
-                                            AirbnbId = airbnbId
-                                        };
-                                        dbContext.GuestMessages.Add(guestMessage);
-
-                                        var guestResponse = new GuestResponse
-                                        {
-                                            GuestMessage = guestMessage,
-                                            Response = qaResponse?.Answer ?? "Sorry, no response from AI.",
-                                            CreatedAt = DateTime.UtcNow
-                                        };
-                                        dbContext.GuestResponses.Add(guestResponse);
-
-                                        // If the extractor returned an amount, attempt to persist it to GuestsPayments
-                                        if (!string.IsNullOrWhiteSpace(amount))
-                                        {
-                                            decimal? parsedAmount = null;
-                                            try
-                                            {
-                                                // Remove currency symbols and letters
-                                                var cleaned = Regex.Replace(amount, "[^0-9,\\.\\-]", "");
-                                                // Heuristic: remove thousands separators (commas)
-                                                cleaned = cleaned.Replace(",", "");
-
-                                                if (decimal.TryParse(cleaned, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var val))
-                                                {
-                                                    parsedAmount = val;
-                                                }
-                                            }
-                                            catch (Exception ex)
-                                            {
-                                                _logger.LogDebug(ex, "Failed to parse amount string: {Amount}", amount);
-                                            }
-
-                                            var guestPayment = new GuestPayment
-                                            {
-                                                FullName = name ?? "Unknown",
-                                                Amount = parsedAmount ?? 0,
-                                                CreatedAt = DateTime.UtcNow
-                                            };
-                                            dbContext.GuestPayments.Add(guestPayment);
-                                        }
-
-                                        await dbContext.SaveChangesAsync();
-
-                                        _logger.LogInformation("Saved guest message to database with ID: {Id}", guestMessage.Id);
                                     }
                                 }
                                 catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
@@ -767,6 +702,147 @@ public partial class GmailNotificationConsumer : BackgroundService
         {
             _logger.LogError(ex, "Error during RabbitMQ cleanup");
         }
+    }
+
+    // Count payout-like monetary amounts in the email body, excluding the trailing "Total paid" summary
+    private int CountPayouts(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return 0;
+
+        // Find position of "Total paid" summary and only search before it
+        var markerIndex = body.IndexOf("Total paid", StringComparison.OrdinalIgnoreCase);
+        var searchArea = markerIndex >= 0 ? body.Substring(0, markerIndex) : body;
+
+        // Regex to match monetary amounts like: ₱3,865.60 PHP or 3.865,60 or 3865.60
+        var amountRegex = new Regex(@"(?:₱|\bPHP\b)?\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*(?:PHP)?",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        var matches = amountRegex.Matches(searchArea);
+
+        // Count matches that actually contain digits (avoid matching stray "PHP" tokens)
+        int count = 0;
+        foreach (Match m in matches)
+        {
+            if (m.Success && Regex.IsMatch(m.Value, "\\d")) count++;
+        }
+
+        return count;
+    }
+
+    // Handle AI extraction and persist GuestMessage/GuestResponse/GuestPayment as needed
+    private async Task HandleAirbnbExtractionAndSaveAsync(string subject, string airBnbEmailBody, string bookedGuestEmailBody, bool isInRange, QaResponse? qaResponse, string messageId)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        IdentifierResult? aiIds = null;
+        try
+        {
+            var extractor = scope.ServiceProvider.GetService<IIdentifierExtractor>();
+            if (extractor != null)
+            {
+                aiIds = await extractor.ExtractAsync(subject + "\n" + airBnbEmailBody, CancellationToken.None);
+                _logger.LogInformation("AI extracted identifiers: {@Ids}", aiIds);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "AI identifier extractor failed; falling back to regex extractor");
+        }
+
+        var (name, email, phone, bookingId, airbnbId, amount) = (aiIds?.Name, aiIds?.Email, aiIds?.Phone, aiIds?.BookingId, aiIds?.AirbnbId, aiIds?.Amount);
+        var suggestion = name ?? bookingId ?? airbnbId ?? email ?? phone ?? amount;
+
+        var guestMessage = new GuestMessage
+        {
+            Message = isInRange ? bookedGuestEmailBody : airBnbEmailBody,
+            Language = "en",
+            Category = "reservation",
+            Sentiment = "neutral",
+            ReplySuggestion = suggestion,
+            Name = name,
+            Email = email,
+            Phone = phone,
+            BookingId = bookingId,
+            AirbnbId = airbnbId
+        };
+        dbContext.GuestMessages.Add(guestMessage);
+
+        var guestResponse = new GuestResponse
+        {
+            GuestMessage = guestMessage,
+            Response = qaResponse?.Answer ?? "Sorry, no response from AI.",
+            CreatedAt = DateTime.UtcNow
+        };
+        dbContext.GuestResponses.Add(guestResponse);
+
+        // If the extractor returned an amount, attempt to persist it to GuestsPayments
+        if (!string.IsNullOrWhiteSpace(amount))
+        {
+            decimal? parsedAmount = null;
+            try
+            {
+                // Remove currency symbols and letters
+                var cleaned = Regex.Replace(amount, "[^0-9,\\.\\-]", "");
+                // Heuristic: remove thousands separators (commas)
+                cleaned = cleaned.Replace(",", "");
+
+                if (decimal.TryParse(cleaned, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var val))
+                {
+                    parsedAmount = val;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to parse amount string: {Amount}", amount);
+            }
+
+            var guestPayment = new GuestPayment
+            {
+                FullName = name ?? "Unknown",
+                Amount = parsedAmount ?? 0,
+                CreatedAt = DateTime.UtcNow
+            };
+            dbContext.GuestPayments.Add(guestPayment);
+        }
+
+        await dbContext.SaveChangesAsync();
+
+        _logger.LogInformation("Saved guest message to database with ID: {Id}", guestMessage.Id);
+    }
+
+    // Split the email body into payout sections (exclude trailing "Total paid" summary)
+    private static List<string> SplitPayoutSections(string body)
+    {
+        var sections = new List<string>();
+        if (string.IsNullOrWhiteSpace(body)) return sections;
+
+        // Exclude the trailing "Total paid" summary
+        var markerIndex = body.IndexOf("Total paid", StringComparison.OrdinalIgnoreCase);
+        var searchArea = markerIndex >= 0 ? body.Substring(0, markerIndex) : body;
+
+        // Use the same amount regex as CountPayouts to find payout anchors
+        var amountRegex = new Regex(@"(?:₱|\bPHP\b)?\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*(?:PHP)?",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        var matches = amountRegex.Matches(searchArea);
+        if (matches.Count == 0)
+        {
+            // Nothing to split; return the whole area as single section
+            var single = searchArea.Trim();
+            if (!string.IsNullOrEmpty(single)) sections.Add(single);
+            return sections;
+        }
+
+        // For N matches produce N sections: [0 .. match[1].Index), [match[1].Index .. match[2].Index), ..., [match[last].Index .. end)
+        for (int i = 0; i < matches.Count; i++)
+        {
+            int start = i == 0 ? 0 : matches[i].Index;
+            int end = (i + 1) < matches.Count ? matches[i + 1].Index : searchArea.Length;
+            var seg = searchArea.Substring(start, end - start).Trim();
+            if (!string.IsNullOrWhiteSpace(seg)) sections.Add(seg);
+        }
+
+        return sections;
     }
 
     public override void Dispose()
