@@ -238,7 +238,7 @@ try
             await botClient.SendTextMessageAsync(new Telegram.Bot.Types.ChatId(chatId), text: urgentText, cancellationToken: CancellationToken.None);
 
             // trigger AMI originate via service - call Asterisk PBX extensions
-            await amiService.TriggerEmergencyAsync(phoneNumber, messageToSend, CancellationToken.None);
+            await amiService.TriggerEmergencyAsync(CancellationToken.None);
         }
 
         // Send Telegram message

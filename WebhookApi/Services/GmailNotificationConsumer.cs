@@ -364,6 +364,19 @@ public partial class GmailNotificationConsumer : BackgroundService
                                             }
 
                                             _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
+
+                                            // Trigger emergency AMI originate if configured
+                                            try
+                                            {
+                                                using var amiScope = _scopeFactory.CreateScope();
+                                                var amiService = amiScope.ServiceProvider.GetService<IEmergencyAmiService>();
+                                                if (amiService != null)
+                                                    await amiService.TriggerEmergencyAsync(CancellationToken.None);
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                _logger.LogError(ex, "Failed to trigger emergency AMI call for MessageId={MessageId}", messageId);
+                                            }
                                         }
                                     }
 

@@ -20,7 +20,7 @@ public class EmergencyAmiService : IEmergencyAmiService
         _config = config;
     }
 
-    public async Task TriggerEmergencyAsync(string phoneNumber, string message, CancellationToken cancellationToken = default)
+    public async Task TriggerEmergencyAsync(CancellationToken cancellationToken = default)
     {
         var amiHost = _config["Asterisk:Host"] ?? "127.0.0.1";
         var amiPort = int.TryParse(_config["Asterisk:Port"], out var p) ? p : 5038;

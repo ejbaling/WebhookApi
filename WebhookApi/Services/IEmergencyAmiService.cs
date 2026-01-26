@@ -5,5 +5,5 @@ namespace WebhookApi.Services;
 
 public interface IEmergencyAmiService
 {
-    Task TriggerEmergencyAsync(string phoneNumber, string message, CancellationToken cancellationToken = default);
+    Task TriggerEmergencyAsync(CancellationToken cancellationToken = default);
 }
