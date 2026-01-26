@@ -428,18 +428,37 @@ public partial class GmailNotificationConsumer : BackgroundService
                                         if (!string.IsNullOrWhiteSpace(amount))
                                         {
                                             decimal? parsedAmount = null;
-                                            try
-                                            {
-                                                // Remove currency symbols and letters
-                                                var cleaned = Regex.Replace(amount, "[^0-9,\\.\\-]", "");
-                                                // Heuristic: remove thousands separators (commas)
-                                                cleaned = cleaned.Replace(",", "");
-
-                                                if (decimal.TryParse(cleaned, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var val))
+                                                try
                                                 {
-                                                    parsedAmount = val;
+                                                    // Remove currency symbols and letters, keep digits, comma, dot, minus
+                                                    var cleaned = Regex.Replace(amount, "[^0-9,\\.\\-]", "").Trim();
+                                                    // Primary normalization: remove thousands separators (commas)
+                                                    var noThousands = cleaned.Replace(",", "");
+
+                                                    _logger.LogDebug("Attempting to parse amount. Raw: '{AmountRaw}', cleaned: '{Cleaned}', noThousands: '{NoThousands}'", amount, cleaned, noThousands);
+
+                                                    if (decimal.TryParse(noThousands, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var val))
+                                                    {
+                                                        parsedAmount = val;
+                                                        _logger.LogInformation("Parsed amount {Parsed} from '{Original}' using invariant format.", parsedAmount, amount);
+                                                    }
+                                                    else
+                                                    {
+                                                        // Fallback: handle locales that use '.' as thousands separator and ',' as decimal separator
+                                                        var alt = cleaned.Replace(".", "").Replace(",", ".");
+                                                        _logger.LogDebug("Primary parse failed; trying alternate normalized value: '{Alt}'", alt);
+
+                                                        if (decimal.TryParse(alt, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out val))
+                                                        {
+                                                            parsedAmount = val;
+                                                            _logger.LogInformation("Parsed amount {Parsed} from '{Original}' using alternate format.", parsedAmount, amount);
+                                                        }
+                                                        else
+                                                        {
+                                                            _logger.LogWarning("Failed to parse amount '{AmountRaw}'. Tried: '{NoThousands}' and '{Alt}'", amount, noThousands, alt);
+                                                        }
+                                                    }
                                                 }
-                                            }
                                             catch (Exception ex)
                                             {
                                                 _logger.LogDebug(ex, "Failed to parse amount string: {Amount}", amount);
