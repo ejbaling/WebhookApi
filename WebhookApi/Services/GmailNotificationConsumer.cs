@@ -578,19 +578,27 @@ public partial class GmailNotificationConsumer : BackgroundService
             if (lines[i].Equals("Details", StringComparison.OrdinalIgnoreCase))
             {
                 isPaymentDetailSection = true;
+                // Parse payments following the "Details" marker and add summary lines
+                var (payments, endIndex) = ParsePayments(lines, i + 1);
+                if (payments != null && payments.Count > 0)
+                {
+                    foreach (var p in payments)
+                    {
+                        actualGuestLines.Add($"Payment: {p.Payer} — {p.Raw}");
+                    }
+                }
+
+                // Advance loop to endIndex to avoid re-processing payment lines
+                if (endIndex > i)
+                    i = endIndex;
+
                 continue;
             }
 
             if (isBookedGuestSection || isPaymentDetailSection || extractAll)
             {
                 // Stop if we hit system markers
-                if (lines[i].StartsWith("REDWOOD", StringComparison.OrdinalIgnoreCase) ||
-                    lines[i].StartsWith("Check-in", StringComparison.OrdinalIgnoreCase) ||
-                    lines[i].StartsWith("Guests", StringComparison.OrdinalIgnoreCase) ||
-                    lines[i].StartsWith("Get the app", StringComparison.OrdinalIgnoreCase) ||
-                    lines[i].StartsWith("Airbnb", StringComparison.OrdinalIgnoreCase) ||
-                    lines[i].StartsWith("Update your email preferences", StringComparison.OrdinalIgnoreCase) ||
-                    lines[i].StartsWith("Get help with payouts", StringComparison.OrdinalIgnoreCase))
+                if (IsSystemMarker(lines[i]))
                     break;
 
                 actualGuestLines.Add(lines[i]);
@@ -663,6 +671,72 @@ public partial class GmailNotificationConsumer : BackgroundService
 
         // Fallback to the first part's body if no text/plain part found
         return payload.Parts[0].Body?.Data != null ? DecodeBase64(payload.Parts[0].Body.Data) : string.Empty;
+    }
+
+    // Parse payment lines that appear after a "Details" section marker.
+    private static (List<(string Payer, decimal Amount, string Raw)> payments, int endIndex) ParsePayments(List<string> lines, int startIndex)
+    {
+        var payments = new List<(string Payer, decimal Amount, string Raw)>();
+        // Matches currency symbols and formatted numbers like ₱ 1,234.56 or $1234.56
+        var amountRx = new Regex(@"(?<amt>[\p{Sc}]?\s?\d{1,3}(?:[,\d{3}])*(?:\.\d{1,2})?)", RegexOptions.Compiled);
+        string? lastNameLine = null;
+        int j = startIndex;
+        for (; j < lines.Count; j++)
+        {
+            var line = lines[j].Trim();
+            if (string.IsNullOrEmpty(line))
+                continue;
+
+            // Stop when we hit known end markers
+            if (IsSystemMarker(line))
+                break;
+
+            // Capture explicit name lines like "Name: John Doe" or "Guest: John Doe"
+            var nameMatch = Regex.Match(line, @"^(?:Name|Guest|Booker)[:\s\-]+(.+)$", RegexOptions.IgnoreCase);
+            if (nameMatch.Success)
+                lastNameLine = nameMatch.Groups[1].Value.Trim();
+
+            // If the line contains an amount, treat it as a payment line
+            var m = amountRx.Match(line);
+            if (m.Success)
+            {
+                var raw = m.Groups["amt"].Value;
+                var cleaned = Regex.Replace(raw, @"[^0-9.\-]", "");
+                if (!decimal.TryParse(cleaned, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var amt))
+                    amt = 0m;
+
+                var inlineNameMatch = Regex.Match(line, @"([A-Z][a-z]+(?:\s[A-Z][a-z]+){0,2})");
+                var inlineName = inlineNameMatch.Success ? inlineNameMatch.Value : null;
+                var payer = inlineName ?? lastNameLine ?? "Unknown";
+                payments.Add((payer, amt, raw));
+            }
+        }
+
+        int endIndex = Math.Max(startIndex, j - 1);
+        return (payments, endIndex);
+    }
+
+    // Shared end/system markers for message parsing
+    private static readonly string[] SystemMarkers = new[]
+    {
+        "REDWOOD",
+        "Check-in",
+        "Guests",
+        "Get the app",
+        "Airbnb",
+        "Update your email preferences",
+        "Get help with payouts"
+    };
+
+    private static bool IsSystemMarker(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return false;
+        foreach (var m in SystemMarkers)
+        {
+            if (line.StartsWith(m, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 
     [GeneratedRegex(@"@airbnb\.com\b", RegexOptions.IgnoreCase)]
