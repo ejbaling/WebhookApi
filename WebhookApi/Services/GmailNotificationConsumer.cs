@@ -584,7 +584,7 @@ public partial class GmailNotificationConsumer : BackgroundService
             if (isBookedGuestSection || isPaymentDetailSection || extractAll)
             {
                 // Stop if we hit system markers
-                if (lines[i].StartsWith("REDWOOD", StringComparison.OrdinalIgnoreCase) ||
+                if ((lines[i].StartsWith("REDWOOD", StringComparison.OrdinalIgnoreCase) && !isPaymentDetailSection) ||
                     lines[i].StartsWith("Check-in", StringComparison.OrdinalIgnoreCase) ||
                     lines[i].StartsWith("Guests", StringComparison.OrdinalIgnoreCase) ||
                     lines[i].StartsWith("Get the app", StringComparison.OrdinalIgnoreCase) ||
