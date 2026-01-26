@@ -64,6 +64,10 @@ public partial class GmailNotificationConsumer : BackgroundService
     // In-memory storage for last processed historyId (development only)
     private static ulong _lastProcessedHistoryId = 0;
 
+    // Single source of truth for amount matching (matches amounts with currency marker ₱ or trailing PHP)
+    private static readonly Regex AmountRegex = new Regex(@"(?:₱\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*(?:PHP)?|\b\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*PHP\b)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     public GmailNotificationConsumer(
         IConnectionFactory connectionFactory,
         ILogger<GmailNotificationConsumer> logger,
@@ -714,7 +718,7 @@ public partial class GmailNotificationConsumer : BackgroundService
     }
 
     // Count payout-like monetary amounts in the email body, excluding the trailing "Total paid" summary
-    private int CountPayouts(string body)
+    private static int CountPayouts(string body)
     {
         if (string.IsNullOrWhiteSpace(body)) return 0;
 
@@ -722,11 +726,7 @@ public partial class GmailNotificationConsumer : BackgroundService
         var markerIndex = body.IndexOf("Total paid", StringComparison.OrdinalIgnoreCase);
         var searchArea = markerIndex >= 0 ? body.Substring(0, markerIndex) : body;
 
-        // Regex to match monetary amounts like: ₱3,865.60 PHP or 3.865,60 or 3865.60
-        var amountRegex = new Regex(@"(?:₱|\bPHP\b)?\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*(?:PHP)?",
-            RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-        var matches = amountRegex.Matches(searchArea);
+        var matches = AmountRegex.Matches(searchArea);
 
         // Count matches that actually contain digits (avoid matching stray "PHP" tokens)
         int count = 0;
@@ -829,11 +829,8 @@ public partial class GmailNotificationConsumer : BackgroundService
         var markerIndex = body.IndexOf("Total paid", StringComparison.OrdinalIgnoreCase);
         var searchArea = markerIndex >= 0 ? body.Substring(0, markerIndex) : body;
 
-        // Use the same amount regex as CountPayouts to find payout anchors
-        var amountRegex = new Regex(@"(?:₱|\bPHP\b)?\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*(?:PHP)?",
-            RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-        var matches = amountRegex.Matches(searchArea);
+        var matches = AmountRegex.Matches(searchArea);
         if (matches.Count == 0)
         {
             // Nothing to split; return the whole area as single section
@@ -842,10 +839,10 @@ public partial class GmailNotificationConsumer : BackgroundService
             return sections;
         }
 
-        // For N matches produce N sections: [0 .. match[1].Index), [match[1].Index .. match[2].Index), ..., [match[last].Index .. end)
+        // For N matches produce N sections anchored at each amount: [match[0].Index .. match[1].Index), [match[1].Index .. match[2].Index), ..., [match[last].Index .. end)
         for (int i = 0; i < matches.Count; i++)
         {
-            int start = i == 0 ? 0 : matches[i].Index;
+            int start = matches[i].Index; // start at the amount itself
             int end = (i + 1) < matches.Count ? matches[i + 1].Index : searchArea.Length;
             var seg = searchArea.Substring(start, end - start).Trim();
             if (!string.IsNullOrWhiteSpace(seg)) sections.Add(seg);
