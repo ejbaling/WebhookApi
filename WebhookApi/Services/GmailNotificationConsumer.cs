@@ -384,9 +384,6 @@ public partial class GmailNotificationConsumer : BackgroundService
                                         var isPayout = subject.Contains("payout", StringComparison.OrdinalIgnoreCase) ||
                                                           subject.Contains("payment", StringComparison.OrdinalIgnoreCase);
                                         var airBnbEmailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, !isPayout) : string.Empty;
-                                        _logger.LogDebug("Airbnb email body for MessageId={MessageId}: {AirbnbBody}", messageId, airBnbEmailBody);
-                                        var AirbnbBodyPreview = airBnbEmailBody?.Length > 1000 ? airBnbEmailBody.Substring(0, 1000) + "..." : airBnbEmailBody;
-                                        _logger.LogInformation("Airbnb email body (truncated) for MessageId={MessageId}: {Preview}", messageId, AirbnbBodyPreview);
 
                                         if (isPayout && CountPayouts(airBnbEmailBody) > 1)
                                         {
@@ -404,7 +401,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                                 foreach (var section in sections)
                                                 {
                                                     sectionIndex++;
-                                                    var preview = section.Length > 200 ? section.Substring(0, 200) + "..." : section;
+                                                    var preview = section.Length > 200 ? string.Concat(section.AsSpan(0, 200), "...") : section;
                                                     _logger.LogInformation("Processing payout section {Index}/{Total} for MessageId={MessageId}: {Preview}", sectionIndex, sections.Count, messageId, preview);
                                                     await HandleAirbnbExtractionAndSaveAsync(subject, section, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId);
                                                 }
@@ -497,7 +494,7 @@ public partial class GmailNotificationConsumer : BackgroundService
         // Step 7: Truncate to maxLength
         return result.Length <= maxLength
             ? result
-            : result.Substring(0, maxLength - 3) + "...";
+            : string.Concat(result.AsSpan(0, maxLength - 3), "...");
     }
 
     private string ExtractMessage(string rawMessage, int maxLength = 160, bool extractAll = false)
@@ -563,7 +560,7 @@ public partial class GmailNotificationConsumer : BackgroundService
         // Step 5: Truncate to maxLength
         return cleanMessage.Length <= maxLength
             ? cleanMessage
-            : cleanMessage.Substring(0, maxLength - 3) + "...";
+            : string.Concat(cleanMessage.AsSpan(0, maxLength - 3), "...");
     }
 
     // Remove invisible characters (including soft hyphen, non-breaking space, etc.)
@@ -733,7 +730,7 @@ public partial class GmailNotificationConsumer : BackgroundService
 
         // Find position of "Total paid" summary and only search before it
         var markerIndex = body.IndexOf("Total paid", StringComparison.OrdinalIgnoreCase);
-        var searchArea = markerIndex >= 0 ? body.Substring(0, markerIndex) : body;
+        var searchArea = markerIndex >= 0 ? body[..markerIndex] : body;
 
         var matches = AmountRegex.Matches(searchArea);
 
@@ -836,7 +833,7 @@ public partial class GmailNotificationConsumer : BackgroundService
 
         // Exclude the trailing "Total paid" summary
         var markerIndex = body.IndexOf("Total paid", StringComparison.OrdinalIgnoreCase);
-        var searchArea = markerIndex >= 0 ? body.Substring(0, markerIndex) : body;
+        var searchArea = markerIndex >= 0 ? body[..markerIndex] : body;
 
 
         var matches = AmountRegex.Matches(searchArea);
