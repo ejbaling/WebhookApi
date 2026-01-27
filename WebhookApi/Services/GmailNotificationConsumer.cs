@@ -760,6 +760,13 @@ public partial class GmailNotificationConsumer : BackgroundService
     // Handle AI extraction and persist GuestMessage/GuestResponse/GuestPayment as needed
     private async Task HandleAirbnbExtractionAndSaveAsync(string subject, string airBnbEmailBody, string bookedGuestEmailBody, bool isInRange, QaResponse? qaResponse, string messageId)
     {
+        // If both bodies are empty or whitespace, skip any DB persistence work
+        if (string.IsNullOrWhiteSpace(bookedGuestEmailBody) && string.IsNullOrWhiteSpace(airBnbEmailBody))
+        {
+            _logger.LogInformation("Skipping DB save for MessageId={MessageId} because both bookedGuestEmailBody and airBnbEmailBody are empty.", messageId);
+            return;
+        }
+
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         IdentifierResult? aiIds = null;
