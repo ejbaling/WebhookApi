@@ -365,18 +365,7 @@ public partial class GmailNotificationConsumer : BackgroundService
 
                                             _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
 
-                                            // Trigger emergency AMI originate if configured
-                                            try
-                                            {
-                                                using var amiScope = _scopeFactory.CreateScope();
-                                                var amiService = amiScope.ServiceProvider.GetService<IEmergencyAmiService>();
-                                                if (amiService != null)
-                                                    await amiService.TriggerEmergencyAsync(CancellationToken.None);
-                                            }
-                                            catch (Exception ex)
-                                            {
-                                                _logger.LogError(ex, "Failed to trigger emergency AMI call for MessageId={MessageId}", messageId);
-                                            }
+                                            // Emergency AMI trigger moved to AI extraction handler; only call when message marked urgent
                                         }
                                     }
 
@@ -775,7 +764,8 @@ public partial class GmailNotificationConsumer : BackgroundService
             var extractor = scope.ServiceProvider.GetService<IIdentifierExtractor>();
             if (extractor != null)
             {
-                aiIds = await extractor.ExtractAsync(subject + "\n" + airBnbEmailBody, CancellationToken.None);
+                var emailBody = isInRange ? bookedGuestEmailBody : airBnbEmailBody;
+                aiIds = await extractor.ExtractAsync(subject + "\n" + emailBody, CancellationToken.None);
                 _logger.LogInformation("AI extracted identifiers: {@Ids}", aiIds);
             }
         }
@@ -784,8 +774,24 @@ public partial class GmailNotificationConsumer : BackgroundService
             _logger.LogWarning(ex, "AI identifier extractor failed; falling back to regex extractor");
         }
 
-        var (name, email, phone, bookingId, airbnbId, amount) = (aiIds?.Name, aiIds?.Email, aiIds?.Phone, aiIds?.BookingId, aiIds?.AirbnbId, aiIds?.Amount);
+        var (name, email, phone, bookingId, airbnbId, amount, urgentFlag) = (aiIds?.Name, aiIds?.Email, aiIds?.Phone, aiIds?.BookingId, aiIds?.AirbnbId, aiIds?.Amount, aiIds?.Urgent ?? false);
         var suggestion = name ?? bookingId ?? airbnbId ?? email ?? phone ?? amount;
+
+        // If AI marked this message as urgent, trigger emergency AMI originate (if configured)
+        if (urgentFlag)
+        {
+            try
+            {
+                using var amiScope = _scopeFactory.CreateScope();
+                var amiService = amiScope.ServiceProvider.GetService<IEmergencyAmiService>();
+                if (amiService != null)
+                    await amiService.TriggerEmergencyAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to trigger emergency AMI call for MessageId={MessageId}", messageId);
+            }
+        }
 
         var guestMessage = new GuestMessage
         {

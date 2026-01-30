@@ -31,14 +31,15 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
         if (string.IsNullOrWhiteSpace(_apiKey))
         {
             _logger.LogWarning("AI:ApiKey not configured; returning empty identifiers.");
-            return new IdentifierResult(null, null, null, null, null, null);
+            return new IdentifierResult(null, null, null, null, null, null, false);
         }
 
-        var prompt = "Extract the following fields from the message: name, email, phone, bookingId, airbnbId, amount.\n"
-                 + "Return ONLY valid JSON with keys: name, email, phone, bookingId, airbnbId, amount. Use null when missing.\n"
-                 + "If present, return `amount` as the full currency string (for example: '₱2,483.65 PHP').\n"
-                 + "Return only the JSON object and nothing else.\n\n"
-                 + "MESSAGE:\n" + text;
+        var prompt = "Extract the following fields from the message: name, email, phone, bookingId, airbnbId, amount, urgent.\n"
+             + "Return ONLY valid JSON with keys: name, email, phone, bookingId, airbnbId, amount, urgent. Use null when missing for strings and false for `urgent`.\n"
+             + "If present, return `amount` as the full currency string (for example: '₱2,483.65 PHP').\n"
+             + "`urgent` should be a boolean: true for urgent messages that need immediate attention, false otherwise.\n"
+             + "Return only the JSON object and nothing else.\n\n"
+             + "MESSAGE:\n" + text;
 
         var payload = new
         {
@@ -63,7 +64,7 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                 {
                     var body = await resp.Content.ReadAsStringAsync(cancellationToken);
                     _logger.LogWarning("Identifier extractor API returned {Status}: {Body}", resp.StatusCode, body);
-                    return new IdentifierResult(null, null, null, null, null, null);
+                    return new IdentifierResult(null, null, null, null, null, null, false);
                 }
 
             var bodyStream = await resp.Content.ReadAsStreamAsync(cancellationToken);
@@ -87,7 +88,7 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
             if (string.IsNullOrWhiteSpace(assistantText))
             {
                 _logger.LogWarning("Identifier extractor returned empty completion content");
-                return new IdentifierResult(null, null, null, null, null, null);
+                return new IdentifierResult(null, null, null, null, null, null, false);
             }
 
             // Clean code fences/backticks
@@ -128,6 +129,6 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
             _logger.LogError(ex, "Identifier extraction request failed");
         }
 
-        return new IdentifierResult(null, null, null, null, null, null);
+        return new IdentifierResult(null, null, null, null, null, null, false);
     }
 }
