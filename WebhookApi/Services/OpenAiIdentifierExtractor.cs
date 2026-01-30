@@ -37,7 +37,9 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
         var prompt = "Extract the following fields from the message: name, email, phone, bookingId, airbnbId, amount, urgent.\n"
              + "Return ONLY valid JSON with keys: name, email, phone, bookingId, airbnbId, amount, urgent. Use null when missing for strings and false for `urgent`.\n"
              + "If present, return `amount` as the full currency string (for example: '₱2,483.65 PHP').\n"
-             + "`urgent` should be a boolean: true for urgent messages that need immediate attention, false otherwise.\n"
+             + "`urgent` should be a boolean: true for any question the guest asks or any request that requires a reply or action (even if not immediate).\n"
+             + "Treat interrogative sentences and explicit questions as urgent. Do NOT rely on code-side heuristics; determine `urgent` based on the content.\n"
+             + "Do NOT mark as urgent when the sender explicitly says 'no rush', 'no hurry', 'no need to reply', or similar.\n"
              + "Return only the JSON object and nothing else.\n\n"
              + "MESSAGE:\n" + text;
 
