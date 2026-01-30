@@ -15,6 +15,7 @@ using WebhookApi.Data;
 using RedwoodIloilo.Common.Entities;
 using RedwoodIloilo.Common.Models;
 using Microsoft.EntityFrameworkCore;
+using NUnit.Framework;
 
 namespace WebhookApi.Services;
 
@@ -778,7 +779,7 @@ public partial class GmailNotificationConsumer : BackgroundService
         var suggestion = name ?? bookingId ?? airbnbId ?? email ?? phone ?? amount;
 
         // If AI marked this message as urgent, trigger emergency AMI originate (if configured)
-        if (urgentFlag)
+        if (isInRange && urgentFlag)
         {
             try
             {
