@@ -689,7 +689,7 @@ public partial class GmailNotificationConsumer : BackgroundService
 
                 // Adjust start and end times to specific hours
                 startDate = startDate.Date.AddHours(6); // Start time at 6 AM
-                endDate = endDate.Date.AddHours(19); // End time at 19 PM
+                endDate = endDate.Date.AddHours(23); // End time at 19 PM
 
                 _logger.LogInformation("Reservation start date: {StartDate}, end date: {EndDate}", startDate, endDate);
                 _logger.LogInformation("Current Philippines date {PhilippinesTime}", philippinesTime);
@@ -796,7 +796,7 @@ public partial class GmailNotificationConsumer : BackgroundService
 
         var guestMessage = new GuestMessage
         {
-            Message = isInRange ? bookedGuestEmailBody : airBnbEmailBody,
+            Message = isInRange && !string.IsNullOrWhiteSpace(bookedGuestEmailBody) ? bookedGuestEmailBody : airBnbEmailBody,
             Language = "en",
             Category = "reservation",
             Sentiment = "neutral",
