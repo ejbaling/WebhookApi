@@ -1,7 +1,6 @@
 using System.Text;
 using System.Text.Json;
 using Serilog;
-using System.IO;
 using RabbitMQ.Client;
 using Telegram.Bot;
 using WebhookApi.Services;
@@ -9,7 +8,6 @@ using WebhookApi.Data;
 using Microsoft.EntityFrameworkCore;
 using RedwoodIloilo.Common.Entities;
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
