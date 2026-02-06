@@ -12,7 +12,7 @@ jobs:
     env:
       DOCKER_IMAGE: ${{ secrets.DOCKER_USERNAME }}/webhookapi:latest
       DOCKER_DIR: WebhookApi
-      REMOTE_HOST: ${{ secrets.TAILSCALE_HOST }} # e.g. username@hostname.tailnet-name.ts.net
+      REMOTE_HOST: ${{ variables.TAILSCALE_HOST }} # e.g. username@hostname.tailnet-name.ts.net
       
     steps:
       - name: Checkout code
