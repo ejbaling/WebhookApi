@@ -60,11 +60,13 @@ jobs:
 
       - name: Deploy via SSH
         run: |
+          ssh -o StrictHostKeyChecking=no $REMOTE_HOST "mkdir -p ~/WebhookApi/WebhookApi"
+          scp -o StrictHostKeyChecking=no $DOCKER_DIR/docker-compose-production.yml $REMOTE_HOST:~/WebhookApi/WebhookApi/docker-compose.yml
           ssh -o StrictHostKeyChecking=no $REMOTE_HOST << EOF
             set -ex
             sudo docker pull $DOCKER_IMAGE
             cd ~/WebhookApi/WebhookApi
-            sudo docker compose down
-            sudo docker compose up -d
+            sudo DOCKER_IMAGE=$DOCKER_IMAGE docker compose down
+            sudo DOCKER_IMAGE=$DOCKER_IMAGE docker compose up -d
             sudo docker system prune -f -f
           EOF
