@@ -12,8 +12,8 @@ jobs:
     env:
       DOCKER_IMAGE: ${{ secrets.DOCKER_USERNAME }}/webhookapi:latest
       DOCKER_DIR: WebhookApi
-      REMOTE_HOST: ${{ variables.TAILSCALE_HOST }} # e.g. username@hostname.tailnet-name.ts.net
-      
+      REMOTE_HOST: ${{ vars.TAILSCALE_HOST }} # e.g. username@hostname.tailnet-name.ts.net
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -33,7 +33,7 @@ jobs:
       - name: Validate JSON format
         run: |
           jq . $DOCKER_DIR/appsettings.Production.json > /dev/null
-      
+
       - name: Build and push Docker image
         run: |
           docker build -t $DOCKER_IMAGE -f $DOCKER_DIR/Dockerfile $DOCKER_DIR
