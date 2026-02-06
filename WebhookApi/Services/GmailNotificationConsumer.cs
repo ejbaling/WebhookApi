@@ -406,13 +406,13 @@ public partial class GmailNotificationConsumer : BackgroundService
                                                     sectionIndex++;
                                                     var preview = section.Length > 200 ? string.Concat(section.AsSpan(0, 200), "...") : section;
                                                     _logger.LogInformation("Processing payout section {Index}/{Total} for MessageId={MessageId}: {Preview}", sectionIndex, sections.Count, messageId, preview);
-                                                    await HandleAirbnbExtractionAndSaveAsync(subject, section, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId);
+                                                    await HandleAirbnbExtractionAndSaveAsync(subject, section, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId, isPayout);
                                                 }
                                             }
                                         }
                                         else
                                         {
-                                            await HandleAirbnbExtractionAndSaveAsync(subject, airBnbEmailBody, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId);
+                                            await HandleAirbnbExtractionAndSaveAsync(subject, airBnbEmailBody, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId, isPayout);
                                         }
                                     }
                                 }
@@ -748,7 +748,7 @@ public partial class GmailNotificationConsumer : BackgroundService
     }
 
     // Handle AI extraction and persist GuestMessage/GuestResponse/GuestPayment as needed
-    private async Task HandleAirbnbExtractionAndSaveAsync(string subject, string airBnbEmailBody, string bookedGuestEmailBody, bool isInRange, QaResponse? qaResponse, string messageId)
+    private async Task HandleAirbnbExtractionAndSaveAsync(string subject, string airBnbEmailBody, string bookedGuestEmailBody, bool isInRange, QaResponse? qaResponse, string messageId, bool isPayout)
     {
         // If both bodies are empty or whitespace, skip any DB persistence work
         if (string.IsNullOrWhiteSpace(bookedGuestEmailBody) && string.IsNullOrWhiteSpace(airBnbEmailBody))
@@ -817,8 +817,8 @@ public partial class GmailNotificationConsumer : BackgroundService
         };
         dbContext.GuestResponses.Add(guestResponse);
 
-        // If the extractor returned an amount, attempt to persist it to GuestsPayments
-        if (!string.IsNullOrWhiteSpace(amount))
+        // Only persist payments when this message is a payout and the extractor returned an amount
+        if (isPayout && !string.IsNullOrWhiteSpace(amount))
         {
             decimal? parsedAmount = null;
             try
