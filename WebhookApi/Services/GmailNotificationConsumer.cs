@@ -283,7 +283,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                     if (isInRange.HasValue)
                                     {
                                         _logger.LogInformation("Current date is {Status} the reservation range.", isInRange.Value ? "within" : "outside");
-                                        if (isInRange.Value)
+                                        if (isInRange.Value && !string.IsNullOrWhiteSpace(bookedGuestEmailBody))
                                         {
 
                                             Config? aiConfig = null;
