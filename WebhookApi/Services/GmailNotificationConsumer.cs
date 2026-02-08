@@ -365,8 +365,6 @@ public partial class GmailNotificationConsumer : BackgroundService
                                             }
 
                                             _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
-
-                                            // Emergency AMI trigger moved to AI extraction handler; only call when message marked urgent
                                         }
                                     }
 
