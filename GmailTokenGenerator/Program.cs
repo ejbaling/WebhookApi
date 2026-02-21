@@ -1,6 +1,10 @@
 ﻿using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using Amazon;
+using Amazon.Runtime.CredentialManagement;
+using Amazon.SimpleSystemsManagement;
+using Amazon.SimpleSystemsManagement.Model;
 using Google.Apis.Gmail.v1;
 using Google.Apis.Gmail.v1.Data;
 using Google.Apis.Auth.OAuth2;
@@ -26,11 +30,58 @@ namespace GmailTokenGenerator
             .AddUserSecrets<Program>()
             .Build();
 
-            string clientId = configuration["GoogleAuth:ClientId"]
-                ?? throw new Exception("Client ID not found in user secrets");
+            // Try to read credentials from AWS SSM Parameter Store (SecureString) first.
+            // Parameter name can be set via env var SSM_PARAMETER_NAME, otherwise use default /gmail/GoogleAuth
+            string ssmParamName = Environment.GetEnvironmentVariable("SSM_PARAMETER_NAME") ?? "/gmail/GoogleAuth";
 
-            string clientSecret = configuration["GoogleAuth:ClientSecret"]
-                ?? throw new Exception("Client secret not found in user secrets");
+            string? clientId = null;
+            string? clientSecret = null;
+            string? topicName = null;
+
+            try
+            {
+                // Optionally force a profile. Profile name can be set via AWS_PROFILE_NAME or AWS_PROFILE env vars.
+                var profileName = Environment.GetEnvironmentVariable("AWS_PROFILE_NAME")
+                                  ?? Environment.GetEnvironmentVariable("AWS_PROFILE")
+                                  ?? "config-manager";
+
+                AmazonSimpleSystemsManagementClient ssm;
+                var chain = new CredentialProfileStoreChain();
+                if (chain.TryGetAWSCredentials(profileName, out var awsCreds))
+                {
+                    ssm = new AmazonSimpleSystemsManagementClient(awsCreds, RegionEndpoint.APSoutheast2);
+                    Console.WriteLine($"Using AWS profile '{profileName}' for SSM");
+                }
+                else
+                {
+                    ssm = new AmazonSimpleSystemsManagementClient();
+                    Console.WriteLine("Using default AWS credentials for SSM");
+                }
+
+                var resp = ssm.GetParameterAsync(new GetParameterRequest { Name = ssmParamName, WithDecryption = true }).GetAwaiter().GetResult();
+                var secretJson = resp.Parameter?.Value;
+                if (!string.IsNullOrWhiteSpace(secretJson))
+                {
+                    using var doc = JsonDocument.Parse(secretJson);
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("ClientId", out var cid)) clientId = cid.GetString();
+                    if (root.TryGetProperty("ClientSecret", out var csec)) clientSecret = csec.GetString();
+                    if (root.TryGetProperty("TopicName", out var t)) topicName = t.GetString();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"SSM lookup failed (parameter={ssmParamName}): {ex.Message}");
+            }
+
+            // Fallback to user secrets if any value is missing
+            // clientId ??= configuration["GoogleAuth:ClientId"];
+            // clientSecret ??= configuration["GoogleAuth:ClientSecret"];
+            // topicName ??= configuration["GoogleAuth:TopicName"];
+
+            clientId = clientId ?? throw new Exception("Client ID not found in user secrets or SSM");
+            clientSecret = clientSecret ?? throw new Exception("Client secret not found in user secrets or SSM");
+            topicName = topicName ?? throw new Exception("Topic name not found in user secrets or SSM");
 
             string authUrl = $"https://accounts.google.com/o/oauth2/v2/auth" +
                             $"?response_type=code&client_id={clientId}" +
@@ -105,12 +156,10 @@ namespace GmailTokenGenerator
                 });
 
                 // Create watch request
-                string topicName = configuration["GoogleAuth:TopicName"]
-                ?? throw new Exception("Topic name not found in user secrets");
                 var watchRequest = new WatchRequest
                 {
                     TopicName = topicName,
-                    LabelIds = new[] { "INBOX" },
+                    LabelIds = ["INBOX"],
                     LabelFilterAction = "include"
                 };
 

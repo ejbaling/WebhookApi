@@ -42,6 +42,10 @@ builder.Services.AddSingleton<IConnectionFactory>(sp =>
 builder.Services.AddHostedService<GmailNotificationConsumer>();
 builder.Services.AddHostedService<WebhookApi.Services.TelegramReceiverService>();
 builder.Services.AddHttpClient();
+// Token service for programmatic token refresh / client_credentials
+builder.Services.AddSingleton<WebhookApi.Services.ITokenService, WebhookApi.Services.TokenService>();
+// Renew Gmail watch subscription in background
+builder.Services.AddHostedService<WebhookApi.Services.GmailWatchRenewalService>();
 // Register intent parser (LLM-backed by default)
 builder.Services.AddSingleton<WebhookApi.Services.IIntentParser, WebhookApi.Services.OpenAiIntentParser>();
 // Register TelegramBotClient singleton from configuration
