@@ -34,6 +34,26 @@ jobs:
         run: |
           jq . $DOCKER_DIR/appsettings.Production.json > /dev/null
 
+      - name: Configure AWS credentials (create shared profile 'config-manager')
+        run: |
+          mkdir -p ~/.aws
+          cat > ~/.aws/credentials <<'EOF'
+          [config-manager]
+          aws_access_key_id = $AWS_ACCESS_KEY_ID
+          aws_secret_access_key = $AWS_SECRET_ACCESS_KEY
+          EOF
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Configure AWS config (create profile 'config-manager')
+        run: |
+          cat > ~/.aws/config <<'EOF'
+          [profile config-manager]
+          region = ap-southeast-2
+          output = json
+          EOF
+
       - name: Build and push Docker image
         run: |
           docker build -t $DOCKER_IMAGE -f $DOCKER_DIR/Dockerfile $DOCKER_DIR
