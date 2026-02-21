@@ -102,8 +102,6 @@ namespace WebhookApi.Services
                                   ?? Environment.GetEnvironmentVariable("AWS_PROFILE")
                                   ?? "config-manager";
 
-                 _logger.LogInformation("Using AWS profile '{Profile}' for SSM", profileName);
-
                 AmazonSimpleSystemsManagementClient ssm;
                 var chain = new CredentialProfileStoreChain();
                 if (chain.TryGetAWSCredentials(profileName, out var awsCreds))
@@ -131,7 +129,6 @@ namespace WebhookApi.Services
             }
             catch (Exception ex)
             {
-                _logger.LogInformation(ex, "SSM lookup failed (parameter={Param})", ssmParamName);
                 _logger.LogDebug(ex, "SSM lookup failed (parameter={Param})", ssmParamName);
             }
 
