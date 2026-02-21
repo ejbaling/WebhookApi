@@ -35,9 +35,8 @@ namespace WebhookApi.Services
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            // Default to once per 24 hours if not configured
-            // var intervalMinutes = _config.GetValue<int?>("GmailNotification:RenewIntervalMinutes") ?? 24 * 60;
-            var intervalMinutes = 1;
+            // Default to once per 6 days if not configured
+            var intervalMinutes = _config.GetValue<int?>("GmailWatchRenewalService:RenewIntervalMinutes") ?? 6 * 24 * 60;
             var delay = TimeSpan.FromMinutes(intervalMinutes);
 
             _logger.LogInformation("GmailWatchRenewalService starting, interval={Minutes}m", intervalMinutes);
@@ -85,7 +84,7 @@ namespace WebhookApi.Services
         {
             if (!bool.TryParse(_config["GmailWatchRenewalService:Enabled"], out var isEnabled) || !isEnabled)
             {
-                _logger.LogDebug("Gmail notifications disabled; skipping watch renewal.");
+                _logger.LogDebug("GmailWatchRenewalService disabled; skipping watch renewal.");
                 return;
             }
 
