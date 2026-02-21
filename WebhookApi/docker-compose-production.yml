@@ -17,9 +17,12 @@ services:
       # - ASPNETCORE_URLS=http://+:80;https://+:443
       - ASPNETCORE_URLS=http://+:80
       - RabbitMQ__HostName=rabbitmq
+      - AWS_PROFILE=config-manager
+      - AWS_SHARED_CREDENTIALS_FILE=/root/.aws/credentials
     restart: unless-stopped
     volumes:
       - ./Logs:/App/Logs:rw
+      - ~/.aws:/root/.aws:ro
     networks:
       - webhook-network
     depends_on:
