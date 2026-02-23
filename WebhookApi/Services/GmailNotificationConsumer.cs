@@ -763,8 +763,7 @@ public partial class GmailNotificationConsumer : BackgroundService
             var extractor = scope.ServiceProvider.GetService<IIdentifierExtractor>();
             if (extractor != null)
             {
-                var emailBody = isInRange ? bookedGuestEmailBody : airBnbEmailBody;
-                aiIds = await extractor.ExtractAsync(subject + "\n" + emailBody, CancellationToken.None);
+                aiIds = await extractor.ExtractAsync(subject + "\n" + airBnbEmailBody, CancellationToken.None);
                 _logger.LogInformation("AI extracted identifiers: {@Ids}", aiIds);
             }
         }
