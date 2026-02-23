@@ -380,7 +380,8 @@ public partial class GmailNotificationConsumer : BackgroundService
                                                         fromHeader.Contains("ej.baling@gmail.com", StringComparison.OrdinalIgnoreCase);
 
                                     // Process Airbnb messages or the test sender email for local testing
-                                    if (isAirbnbSender || isTestSender)
+                                    // if (isAirbnbSender || isTestSender)
+                                    if (isAirbnbSender)
                                     {
                                         var isPayout = subject.Contains("payout", StringComparison.OrdinalIgnoreCase) ||
                                                           subject.Contains("payment", StringComparison.OrdinalIgnoreCase);
