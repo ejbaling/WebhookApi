@@ -296,6 +296,11 @@ public partial class GmailNotificationConsumer : BackgroundService
 
                                     var bookedGuestEmailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
 
+                                    // Skip processing if the booked guest section is just an Airbnb reaction (e.g. "Reacted ❤️ to ...")
+                                    if (!string.IsNullOrWhiteSpace(bookedGuestEmailBody) &&
+                                        bookedGuestEmailBody.Contains("Reacted ❤️ to", StringComparison.OrdinalIgnoreCase))
+                                        continue;
+
                                     // Extract date range from subject and check if today is in range
                                     bool? isInRange = IsCurrentDateInReservationRange(subject);
                                     QaResponse? qaResponse = null;
