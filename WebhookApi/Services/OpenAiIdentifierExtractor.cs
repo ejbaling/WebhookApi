@@ -61,6 +61,16 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
             req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
             req.Content = JsonContent.Create(payload);
 
+            //  // For local Ollama, set AI:Endpoint = "http://localhost:11434" and AI:Model = "<your-model>"
+            // using var req = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(_endpoint + "/"), "api/chat"));
+            // // Ollama often runs locally without an API key; if yours requires auth, add the header here.
+            // req.Content = JsonContent.Create(new {
+            //     model = _model,
+            //     messages = payload.messages,
+            //     temperature = 0.0,
+            //     max_tokens = 300
+            // });
+
             using var resp = await client.SendAsync(req, cancellationToken);
                 if (!resp.IsSuccessStatusCode)
                 {

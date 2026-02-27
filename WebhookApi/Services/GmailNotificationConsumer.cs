@@ -274,6 +274,26 @@ public partial class GmailNotificationConsumer : BackgroundService
                                     string subject = message.Payload?.Headers?.FirstOrDefault(h => h.Name == "Subject")?.Value ?? "(No Subject)";
                                     _logger.LogInformation("Email subject: {Subject}", subject);
 
+                                    // Determine sender and only process if from airbnb.com
+                                    var fromHeader = message.Payload?.Headers?.FirstOrDefault(h => h.Name == "From")?.Value ?? string.Empty;
+
+                                    // Log the from header via the application's logger (captured by Serilog)
+                                    _logger.LogInformation("Gmail From header: {FromHeader} MessageId:{MessageId}", fromHeader, messageId);
+
+                                    bool isAirbnbSender = AirbnbRegex().IsMatch(fromHeader);
+                                    bool isTestSender = !string.IsNullOrWhiteSpace(fromHeader) &&
+                                                        fromHeader.Contains("ej.baling@gmail.com", StringComparison.OrdinalIgnoreCase);
+
+                                    // Process Airbnb messages or the test sender email for local testing
+                                    // if (isAirbnbSender || isTestSender)
+                                    if (!isAirbnbSender && !isTestSender)
+                                        continue;
+
+                                    // Skip processing for certain subjects (list may grow)
+                                    var skipSubjectMarkers = new[] { "wrote you a review", "Write a review for" };
+                                    if (skipSubjectMarkers.Any(m => !string.IsNullOrWhiteSpace(subject) && subject.Contains(m, StringComparison.OrdinalIgnoreCase)))
+                                        continue;
+
                                     var bookedGuestEmailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
 
                                     // Extract date range from subject and check if today is in range
@@ -368,51 +388,35 @@ public partial class GmailNotificationConsumer : BackgroundService
                                         }
                                     }
 
-                                    // Save to database
-                                    // Determine sender and only save if from airbnb.com
-                                    var fromHeader = message.Payload?.Headers?.FirstOrDefault(h => h.Name == "From")?.Value ?? string.Empty;
+                                    var isPayout = subject.Contains("payout", StringComparison.OrdinalIgnoreCase) ||
+                                                        subject.Contains("payment", StringComparison.OrdinalIgnoreCase);
+                                    var airBnbEmailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, !isPayout) : string.Empty;
 
-                                    // Log the from header via the application's logger (captured by Serilog)
-                                    _logger.LogInformation("Gmail From header: {FromHeader} MessageId:{MessageId}", fromHeader, messageId);
-
-                                    bool isAirbnbSender = AirbnbRegex().IsMatch(fromHeader);
-                                    bool isTestSender = !string.IsNullOrWhiteSpace(fromHeader) &&
-                                                        fromHeader.Contains("ej.baling@gmail.com", StringComparison.OrdinalIgnoreCase);
-
-                                    // Process Airbnb messages or the test sender email for local testing
-                                    // if (isAirbnbSender || isTestSender)
-                                    if (isAirbnbSender)
+                                    if (isPayout && CountPayouts(airBnbEmailBody) > 1)
                                     {
-                                        var isPayout = subject.Contains("payout", StringComparison.OrdinalIgnoreCase) ||
-                                                          subject.Contains("payment", StringComparison.OrdinalIgnoreCase);
-                                        var airBnbEmailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, !isPayout) : string.Empty;
+                                        var sections = SplitPayoutSections(airBnbEmailBody);
+                                        _logger.LogInformation("Splitting Airbnb payout email into {Count} sections for message {MessageId}", sections.Count, messageId);
 
-                                        if (isPayout && CountPayouts(airBnbEmailBody) > 1)
+                                        // Safety: if the splitter produced too many sections, skip processing to avoid spurious work
+                                        if (sections.Count > 4)
                                         {
-                                            var sections = SplitPayoutSections(airBnbEmailBody);
-                                            _logger.LogInformation("Splitting Airbnb payout email into {Count} sections for message {MessageId}", sections.Count, messageId);
-
-                                            // Safety: if the splitter produced too many sections, skip processing to avoid spurious work
-                                            if (sections.Count > 4)
-                                            {
-                                                _logger.LogWarning("Detected {Count} payout sections for MessageId={MessageId} which exceeds configured limit of 4; skipping processing.", sections.Count, messageId);
-                                            }
-                                            else
-                                            {
-                                                int sectionIndex = 0;
-                                                foreach (var section in sections)
-                                                {
-                                                    sectionIndex++;
-                                                    var preview = section.Length > 200 ? string.Concat(section.AsSpan(0, 200), "...") : section;
-                                                    _logger.LogInformation("Processing payout section {Index}/{Total} for MessageId={MessageId}: {Preview}", sectionIndex, sections.Count, messageId, preview);
-                                                    await HandleAirbnbExtractionAndSaveAsync(subject, section, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId, isPayout);
-                                                }
-                                            }
+                                            _logger.LogWarning("Detected {Count} payout sections for MessageId={MessageId} which exceeds configured limit of 4; skipping processing.", sections.Count, messageId);
                                         }
                                         else
                                         {
-                                            await HandleAirbnbExtractionAndSaveAsync(subject, airBnbEmailBody, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId, isPayout);
+                                            int sectionIndex = 0;
+                                            foreach (var section in sections)
+                                            {
+                                                sectionIndex++;
+                                                var preview = section.Length > 200 ? string.Concat(section.AsSpan(0, 200), "...") : section;
+                                                _logger.LogInformation("Processing payout section {Index}/{Total} for MessageId={MessageId}: {Preview}", sectionIndex, sections.Count, messageId, preview);
+                                                await HandleAirbnbExtractionAndSaveAsync(subject, section, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId, isPayout);
+                                            }
                                         }
+                                    }
+                                    else
+                                    {
+                                        await HandleAirbnbExtractionAndSaveAsync(subject, airBnbEmailBody, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId, isPayout);
                                     }
                                 }
                                 catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
