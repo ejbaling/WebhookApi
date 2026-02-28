@@ -290,7 +290,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                         continue;
 
                                     // Skip processing for certain subjects (list may grow)
-                                    var skipSubjectMarkers = new[] { "wrote you a review", "Write a review for" };
+                                    var skipSubjectMarkers = new[] { "wrote you a review", "Write a review for", "Reservation confirmed", "Reservation reminder" };
                                     if (skipSubjectMarkers.Any(m => !string.IsNullOrWhiteSpace(subject) && subject.Contains(m, StringComparison.OrdinalIgnoreCase)))
                                         continue;
 
