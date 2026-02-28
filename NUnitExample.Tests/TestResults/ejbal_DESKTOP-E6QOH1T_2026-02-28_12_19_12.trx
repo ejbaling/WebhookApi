@@ -1,0 +1,51 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="cc732c51-fa1f-4eaf-a9fa-a4d89080657c" name="ejbal@DESKTOP-E6QOH1T 2026-02-28 12:19:12" runUser="DESKTOP-E6QOH1T\ejbal" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-02-28T12:19:12.7277592+13:00" queuing="2026-02-28T12:19:12.7277601+13:00" start="2026-02-28T12:19:09.7567420+13:00" finish="2026-02-28T12:19:12.7363796+13:00" />
+  <TestSettings name="default" id="f97e7f6e-b0f9-4ec4-875e-8561832c990d">
+    <Deployment runDeploymentRoot="ejbal_DESKTOP-E6QOH1T_2026-02-28_12_19_12" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="e5bb03c3-bc7e-4aea-9bf1-db75c6867fcd" testId="ec986d4b-976b-5434-e3bb-bf9054a1a390" testName="AddNumbers_WhenGivenTwoIntegers_ReturnsCorrectSum" computerName="DESKTOP-E6QOH1T" duration="00:00:00.0139800" startTime="2026-02-28T12:19:12.5368445+13:00" endTime="2026-02-28T12:19:12.5507585+13:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e5bb03c3-bc7e-4aea-9bf1-db75c6867fcd" />
+    <UnitTestResult executionId="a06ab6de-c9aa-4e42-aae5-5395ae9a65f5" testId="82d66546-5301-7fb8-1e80-12c1326ccc24" testName="CreateTimePayload_ReturnsExpectedOffsetAndDate" computerName="DESKTOP-E6QOH1T" duration="00:00:00.0019719" startTime="2026-02-28T12:19:12.5568929+13:00" endTime="2026-02-28T12:19:12.5588644+13:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a06ab6de-c9aa-4e42-aae5-5395ae9a65f5" />
+    <UnitTestResult executionId="cfc32d58-6c84-4371-a962-3af22c723af5" testId="4267033d-c2ed-603a-203b-f0fe39af8ba4" testName="BuildDeviceBaseAddress_WithoutScheme_BuildsHttpUri" computerName="DESKTOP-E6QOH1T" duration="00:00:00.0004700" startTime="2026-02-28T12:19:12.5564023+13:00" endTime="2026-02-28T12:19:12.5568727+13:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="cfc32d58-6c84-4371-a962-3af22c723af5" />
+    <UnitTestResult executionId="2f3113b1-aff0-4c82-bc0d-76cd486b6223" testId="b9189b5a-2f44-51b5-b671-e9adff462118" testName="BuildDeviceBaseAddress_WithHttpUri_AppliesPort" computerName="DESKTOP-E6QOH1T" duration="00:00:00.0022730" startTime="2026-02-28T12:19:12.5540644+13:00" endTime="2026-02-28T12:19:12.5563364+13:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="2f3113b1-aff0-4c82-bc0d-76cd486b6223" />
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="BuildDeviceBaseAddress_WithoutScheme_BuildsHttpUri" storage="d:\src\webhookapi\nunitexample.tests\bin\debug\net9.0\nunitexample.tests.dll" id="4267033d-c2ed-603a-203b-f0fe39af8ba4">
+      <Execution id="cfc32d58-6c84-4371-a962-3af22c723af5" />
+      <TestMethod codeBase="D:\src\WebhookApi\NUnitExample.Tests\bin\Debug\net9.0\NUnitExample.Tests.dll" adapterTypeName="executor://nunit3testexecutor/" className="NUnitExample.Tests.TailscaleHelpersTests" name="BuildDeviceBaseAddress_WithoutScheme_BuildsHttpUri" />
+    </UnitTest>
+    <UnitTest name="BuildDeviceBaseAddress_WithHttpUri_AppliesPort" storage="d:\src\webhookapi\nunitexample.tests\bin\debug\net9.0\nunitexample.tests.dll" id="b9189b5a-2f44-51b5-b671-e9adff462118">
+      <Execution id="2f3113b1-aff0-4c82-bc0d-76cd486b6223" />
+      <TestMethod codeBase="D:\src\WebhookApi\NUnitExample.Tests\bin\Debug\net9.0\NUnitExample.Tests.dll" adapterTypeName="executor://nunit3testexecutor/" className="NUnitExample.Tests.TailscaleHelpersTests" name="BuildDeviceBaseAddress_WithHttpUri_AppliesPort" />
+    </UnitTest>
+    <UnitTest name="AddNumbers_WhenGivenTwoIntegers_ReturnsCorrectSum" storage="d:\src\webhookapi\nunitexample.tests\bin\debug\net9.0\nunitexample.tests.dll" id="ec986d4b-976b-5434-e3bb-bf9054a1a390">
+      <Execution id="e5bb03c3-bc7e-4aea-9bf1-db75c6867fcd" />
+      <TestMethod codeBase="D:\src\WebhookApi\NUnitExample.Tests\bin\Debug\net9.0\NUnitExample.Tests.dll" adapterTypeName="executor://nunit3testexecutor/" className="NUnitExample.Tests.CalculatorTests" name="AddNumbers_WhenGivenTwoIntegers_ReturnsCorrectSum" />
+    </UnitTest>
+    <UnitTest name="CreateTimePayload_ReturnsExpectedOffsetAndDate" storage="d:\src\webhookapi\nunitexample.tests\bin\debug\net9.0\nunitexample.tests.dll" id="82d66546-5301-7fb8-1e80-12c1326ccc24">
+      <Execution id="a06ab6de-c9aa-4e42-aae5-5395ae9a65f5" />
+      <TestMethod codeBase="D:\src\WebhookApi\NUnitExample.Tests\bin\Debug\net9.0\NUnitExample.Tests.dll" adapterTypeName="executor://nunit3testexecutor/" className="NUnitExample.Tests.TailscaleHelpersTests" name="CreateTimePayload_ReturnsExpectedOffsetAndDate" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="ec986d4b-976b-5434-e3bb-bf9054a1a390" executionId="e5bb03c3-bc7e-4aea-9bf1-db75c6867fcd" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="82d66546-5301-7fb8-1e80-12c1326ccc24" executionId="a06ab6de-c9aa-4e42-aae5-5395ae9a65f5" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="4267033d-c2ed-603a-203b-f0fe39af8ba4" executionId="cfc32d58-6c84-4371-a962-3af22c723af5" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b9189b5a-2f44-51b5-b671-e9adff462118" executionId="2f3113b1-aff0-4c82-bc0d-76cd486b6223" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="Results Not in a List" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="All Loaded Results" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="4" executed="4" passed="4" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>NUnit Adapter 4.6.0.0: Test execution started&#xD;
+Running all tests in D:\src\WebhookApi\NUnitExample.Tests\bin\Debug\net9.0\NUnitExample.Tests.dll&#xD;
+   NUnit3TestExecutor discovered 4 of 4 NUnit test cases using Current Discovery mode, Non-Explicit run&#xD;
+NUnit Adapter 4.6.0.0: Test execution complete&#xD;
+</StdOut>
+    </Output>
+  </ResultSummary>
+</TestRun>

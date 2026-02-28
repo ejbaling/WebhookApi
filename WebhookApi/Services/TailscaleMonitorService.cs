@@ -81,8 +81,7 @@ namespace WebhookApi.Services
                     using var stream = await resp.Content.ReadAsStreamAsync(stoppingToken);
                     using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: stoppingToken);
 
-                    JsonElement devicesElement;
-                    if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("devices", out devicesElement))
+                    if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("devices", out JsonElement devicesElement))
                     {
                         // ok
                     }
@@ -96,8 +95,6 @@ namespace WebhookApi.Services
                         await Task.Delay(TimeSpan.FromSeconds(pollIntervalSeconds), stoppingToken);
                         continue;
                     }
-
-                    // _logger.LogInformation("Tailscale API returned {DeviceCount} devices", devicesElement.GetArrayLength());
 
                     foreach (var device in devicesElement.EnumerateArray())
                     {
@@ -151,6 +148,21 @@ namespace WebhookApi.Services
                             {
                                 _ = SendOnlineAlertAsync(name, id, stoppingToken);
                             }
+
+                            // If this device matches the configured sync target, attempt to set its device time
+                            try
+                            {
+                                var syncTargetName = _configuration["Tailscale:SyncTargetName"]?.Trim();
+                                if (!string.IsNullOrEmpty(syncTargetName) && string.Equals(syncTargetName, name, StringComparison.OrdinalIgnoreCase))
+                                    _ = SetDeviceTimeAsync("SONOFF SPM", stoppingToken);
+
+                                
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Failed to trigger SetDeviceTimeAsync for device {Name} ({Id})", name, id);
+                            }
+                            
                         }
                         
                         _deviceOnlineState[id] = isOnline;
@@ -209,6 +221,136 @@ namespace WebhookApi.Services
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to send Telegram alert for device {Name} ({Id})", name, id);
+            }
+        }
+
+        private async Task SetDeviceTimeAsync(string name, CancellationToken ct)
+        {
+            string? deviceIdToSend = null;
+
+            try
+            {
+                // Require a configured port for the target device
+                var port = _configuration.GetValue<int?>("Tailscale:SyncDevicePort");
+                if (!port.HasValue)
+                {
+                    _logger.LogWarning("SetDeviceTimeAsync: no SyncDevicePort configured; skipping time set for {Name}.", name);
+                    return;
+                }
+
+                // Use configured IP for the target device
+                var ip = _configuration["Tailscale:SyncDeviceIp"]?.Trim();
+                if (string.IsNullOrWhiteSpace(ip))
+                {
+                    _logger.LogWarning("SetDeviceTimeAsync: no SyncDeviceIp configured; skipping time set for {Name}.", name);
+                    return;
+                }
+
+                // Build payload and base address using helpers
+                string? tzConfig = _configuration["Tailscale:Timezone"];
+                if (string.IsNullOrWhiteSpace(tzConfig))
+                {
+                    _logger.LogWarning("SetDeviceTimeAsync: no timezone configured (Tailscale:Timezone); skipping time set for {Name}.", name);
+                    return;
+                }
+
+                deviceIdToSend = _configuration["Tailscale:SyncDeviceId"]?.Trim();
+                var nowUtc = DateTime.UtcNow;
+
+                TimePayload payload;
+                try
+                {
+                    payload = TailscaleHelpers.CreateTimePayload(nowUtc, tzConfig, deviceIdToSend);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "SetDeviceTimeAsync: configured timezone '{Tz}' is invalid; skipping time set for {Name}.", tzConfig, name);
+                    return;
+                }
+
+                // Prepare HTTP client
+                var client = _httpClientFactory.CreateClient(nameof(TailscaleMonitorService));
+
+                string baseAddress;
+                try
+                {
+                    baseAddress = TailscaleHelpers.BuildDeviceBaseAddress(ip, port.Value);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "SetDeviceTimeAsync: failed to build base address from SyncDeviceIp '{Ip}' and port {Port}; skipping time set for {Name}.", ip, port.Value, name);
+                    return;
+                }
+
+                client.BaseAddress = new Uri(baseAddress);
+
+                _logger.LogInformation("SetDeviceTimeAsync - POST {BaseUrl}zeroconf/time payload: {@Payload}", client.BaseAddress, payload);
+
+                var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+                using var resp = await client.PostAsync("zeroconf/time", content, ct);
+                if (resp.IsSuccessStatusCode)
+                {
+                    _logger.LogInformation("SetDeviceTimeAsync succeeded for device {Name} with status {Status}", name, resp.StatusCode);
+                    try
+                    {
+                        if (_telegramClient is not null && !string.IsNullOrEmpty(_telegramChatId))
+                        {
+                            var text = $"Set device time succeeded: {name} ({deviceIdToSend}) at {nowUtc:yyyy-MM-dd HH:mm:ss} UTC, status {resp.StatusCode}";
+                            await _telegramClient.SendTextMessageAsync(new ChatId(_telegramChatId), text, cancellationToken: ct);
+                            _logger.LogInformation("Sent Telegram alert for successful time set for device {Name}", name);
+                        }
+                    }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        // ignore cancellation during shutdown
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to send Telegram success alert for device {Name}", name);
+                    }
+                }
+                else
+                {
+                    var body = await resp.Content.ReadAsStringAsync(ct);
+                    _logger.LogWarning("SetDeviceTimeAsync returned {Status} for device {Name}: {Body}", resp.StatusCode, name, body);
+                    try
+                    {
+                        if (_telegramClient is not null && !string.IsNullOrEmpty(_telegramChatId))
+                        {
+                            var text = $"Set device time FAILED: {name} ({deviceIdToSend}) at {nowUtc:yyyy-MM-dd HH:mm:ss} UTC, status {resp.StatusCode}: {body}";
+                            await _telegramClient.SendTextMessageAsync(new ChatId(_telegramChatId), text, cancellationToken: ct);
+                            _logger.LogInformation("Sent Telegram alert for failed time set for device {Name}", name);
+                        }
+                    }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        // ignore cancellation during shutdown
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to send Telegram failure alert for device {Name}", name);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // ignore cancellation
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "SetDeviceTimeAsync failed for device {Name}", name);
+                try
+                {
+                    if (_telegramClient is not null && !string.IsNullOrEmpty(_telegramChatId))
+                    {
+                        var text = $"Set device time encountered error for {name} ({deviceIdToSend}): {ex.Message}";
+                        await _telegramClient.SendTextMessageAsync(new ChatId(_telegramChatId), text, cancellationToken: ct);
+                    }
+                }
+                catch
+                {
+                    // swallow any exceptions sending alert
+                }
             }
         }
     }
