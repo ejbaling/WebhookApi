@@ -58,7 +58,8 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
 
         try
         {
-            var client = _httpFactory.CreateClient();
+            // Use named AI client so timeout can be configured in Program.cs (AI:TimeoutSeconds)
+            var client = _httpFactory.CreateClient("ai");
 
             // Decide endpoint path: respect explicit provider config, otherwise auto-detect from endpoint
             bool isLocalOllama;

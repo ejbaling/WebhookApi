@@ -85,6 +85,10 @@ builder.Services.AddScoped<IRuleRepository, RuleRepository>();
 // Add HttpClient support
 builder.Services.AddHttpClient();
 
+// Configure a named HttpClient for AI calls with a configurable timeout (seconds)
+var aiTimeoutSeconds = builder.Configuration.GetValue<int?>("AI:TimeoutSeconds") ?? 600; // default 10 minutes
+builder.Services.AddHttpClient("ai").ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(aiTimeoutSeconds));
+
 // Emergency AMI service for originating calls to PBX
 builder.Services.AddSingleton<WebhookApi.Services.IEmergencyAmiService, WebhookApi.Services.EmergencyAmiService>();
 
