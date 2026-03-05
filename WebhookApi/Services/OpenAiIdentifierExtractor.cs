@@ -16,6 +16,7 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
     private readonly string _apiKey;
     private readonly string _model;
     private readonly string _endpoint;
+    private readonly string _provider;
 
     public OpenAiIdentifierExtractor(IConfiguration config, IHttpClientFactory httpFactory, ILogger<OpenAiIdentifierExtractor> logger)
     {
@@ -24,15 +25,16 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
         _apiKey = config["AI:ApiKey"] ?? string.Empty;
         _model = config["AI:Model"] ?? "gpt-4o-mini";
         _endpoint = config["AI:Endpoint"]?.TrimEnd('/') ?? "https://api.openai.com";
+        // Provider can be "openai", "ollama" (or "local"), or "auto" (default).
+        _provider = (config["AI:Provider"] ?? "auto").ToLowerInvariant();
     }
 
     public async Task<IdentifierResult> ExtractAsync(string text, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_apiKey))
-        {
-            _logger.LogWarning("AI:ApiKey not configured; returning empty identifiers.");
-            return new IdentifierResult(null, null, null, null, null, null, false);
-        }
+        // Require API key only when explicitly configured to use OpenAI, or when auto-detection
+        // determines we are calling a remote OpenAI endpoint.
+        // If provider is 'ollama' or 'local', allow missing API key for local usage.
+        // We'll check more precisely after resolving provider/endpoint below.
 
         var prompt = "Extract the following fields from the message: name, email, phone, bookingId, airbnbId, amount, urgent.\n"
              + "Return ONLY valid JSON with keys: name, email, phone, bookingId, airbnbId, amount, urgent. Use null when missing for strings and false for `urgent`.\n"
@@ -57,44 +59,125 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
         try
         {
             var client = _httpFactory.CreateClient();
-            using var req = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(_endpoint + "/"), "v1/chat/completions"));
-            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
+
+            // Decide endpoint path: respect explicit provider config, otherwise auto-detect from endpoint
+            bool isLocalOllama;
+            if (_provider == "ollama" || _provider == "local")
+            {
+                isLocalOllama = true;
+            }
+            else if (_provider == "openai")
+            {
+                isLocalOllama = false;
+            }
+            else // auto
+            {
+                isLocalOllama = _endpoint.Contains("11434") || _endpoint.Contains("localhost", StringComparison.OrdinalIgnoreCase) || _endpoint.Contains("/api/chat", StringComparison.OrdinalIgnoreCase) || _endpoint.Contains("100.80.77.91", StringComparison.OrdinalIgnoreCase);
+            }
+            var relativePath = isLocalOllama ? "api/chat" : "v1/chat/completions";
+
+            // If we need an API key for OpenAI and none is configured, abort early
+            if (!isLocalOllama && string.IsNullOrWhiteSpace(_apiKey))
+            {
+                _logger.LogWarning("AI:ApiKey not configured for remote OpenAI provider; returning empty identifiers.");
+                return new IdentifierResult(null, null, null, null, null, null, false);
+            }
+
+            using var req = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(_endpoint + "/"), relativePath));
+            if (!isLocalOllama)
+                req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
+
             req.Content = JsonContent.Create(payload);
 
-            //  // For local Ollama, set AI:Endpoint = "http://localhost:11434" and AI:Model = "<your-model>"
-            // using var req = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(_endpoint + "/"), "api/chat"));
-            // // Ollama often runs locally without an API key; if yours requires auth, add the header here.
-            // req.Content = JsonContent.Create(new {
-            //     model = _model,
-            //     messages = payload.messages,
-            //     temperature = 0.0,
-            //     max_tokens = 300
-            // });
-
-            using var resp = await client.SendAsync(req, cancellationToken);
-                if (!resp.IsSuccessStatusCode)
-                {
-                    var body = await resp.Content.ReadAsStringAsync(cancellationToken);
-                    _logger.LogWarning("Identifier extractor API returned {Status}: {Body}", resp.StatusCode, body);
-                    return new IdentifierResult(null, null, null, null, null, null, false);
-                }
-
-            var bodyStream = await resp.Content.ReadAsStreamAsync(cancellationToken);
-            using var doc = await JsonDocument.ParseAsync(bodyStream, cancellationToken: cancellationToken);
-            var root = doc.RootElement;
-
-            string assistantText = string.Empty;
-            if (root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0)
+            using var resp = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            if (!resp.IsSuccessStatusCode)
             {
-                var first = choices[0];
-                if (first.TryGetProperty("message", out var message) && message.TryGetProperty("content", out var content))
+                var body = await resp.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogWarning("Identifier extractor API returned {Status}: {Body}", resp.StatusCode, body);
+                return new IdentifierResult(null, null, null, null, null, null, false);
+            }
+
+            // Read streaming lines if available (Ollama / local LLMs often stream newline-delimited JSON)
+            var sb = new System.Text.StringBuilder();
+            using var stream = await resp.Content.ReadAsStreamAsync(cancellationToken);
+            using var reader = new StreamReader(stream);
+            while (!reader.EndOfStream && !cancellationToken.IsCancellationRequested)
+            {
+                var line = await reader.ReadLineAsync();
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                if (line.StartsWith("data: ")) line = line.Substring(6);
+
+                try
                 {
-                    assistantText = content.GetString() ?? string.Empty;
+                    using var doc = JsonDocument.Parse(line);
+                    var root = doc.RootElement;
+
+                    // Ollama-style: { "message": { "role":"assistant","content":"..." }, "done": false }
+                    if (root.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.Object && message.TryGetProperty("content", out var contentElem))
+                    {
+                        var piece = contentElem.GetString();
+                        if (!string.IsNullOrEmpty(piece)) sb.Append(piece);
+                    }
+                    // OpenAI streaming deltas: {"choices":[{"delta":{"content":"..."}, ...}], ...}
+                    else if (root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0)
+                    {
+                        var first = choices[0];
+                        if (first.TryGetProperty("delta", out var delta) && delta.ValueKind == JsonValueKind.Object && delta.TryGetProperty("content", out var deltaContent))
+                        {
+                            var piece = deltaContent.GetString();
+                            if (!string.IsNullOrEmpty(piece)) sb.Append(piece);
+                        }
+                        else if (first.TryGetProperty("message", out var msg) && msg.TryGetProperty("content", out var msgContent))
+                        {
+                            var piece = msgContent.GetString();
+                            if (!string.IsNullOrEmpty(piece)) sb.Append(piece);
+                        }
+                        else if (first.TryGetProperty("text", out var textElem))
+                        {
+                            var piece = textElem.GetString();
+                            if (!string.IsNullOrEmpty(piece)) sb.Append(piece);
+                        }
+                    }
+
+                    if (root.TryGetProperty("done", out var doneElem) && doneElem.ValueKind == JsonValueKind.True)
+                    {
+                        break;
+                    }
                 }
-                else if (first.TryGetProperty("text", out var textElem))
+                catch (JsonException)
                 {
-                    assistantText = textElem.GetString() ?? string.Empty;
+                    // ignore non-json lines
                 }
+            }
+
+            string assistantText = sb.ToString();
+
+            // Fallback: if streaming produced nothing, try full-body parse (OpenAI non-stream)
+            if (string.IsNullOrWhiteSpace(assistantText))
+            {
+                var bodyStream = await resp.Content.ReadAsStreamAsync(cancellationToken);
+                using var doc = await JsonDocument.ParseAsync(bodyStream, cancellationToken: cancellationToken);
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0)
+                {
+                    var first = choices[0];
+                    if (first.TryGetProperty("message", out var message) && message.TryGetProperty("content", out var content))
+                    {
+                        assistantText = content.GetString() ?? string.Empty;
+                    }
+                    else if (first.TryGetProperty("text", out var textElem))
+                    {
+                        assistantText = textElem.GetString() ?? string.Empty;
+                    }
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(assistantText))
+            {
+                _logger.LogWarning("Identifier extractor returned empty completion content");
+                return new IdentifierResult(null, null, null, null, null, null, false);
             }
 
             if (string.IsNullOrWhiteSpace(assistantText))
