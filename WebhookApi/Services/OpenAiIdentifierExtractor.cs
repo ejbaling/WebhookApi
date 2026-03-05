@@ -36,14 +36,21 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
         // If provider is 'ollama' or 'local', allow missing API key for local usage.
         // We'll check more precisely after resolving provider/endpoint below.
 
-        var prompt = "Extract the following fields from the message: name, email, phone, bookingId, airbnbId, amount, urgent.\n"
-             + "Return ONLY valid JSON with keys: name, email, phone, bookingId, airbnbId, amount, urgent. Use null when missing for strings and false for `urgent`.\n"
-             + "If present, return `amount` as the full currency string (for example: '₱2,483.65 PHP').\n"
-             + "`urgent` should be a boolean: true for any question the guest asks or any request that requires a reply or action (even if not immediate).\n"
-             + "Treat interrogative sentences and explicit questions as urgent. Do NOT rely on code-side heuristics; determine `urgent` based on the content.\n"
-             + "Do NOT mark as urgent when the sender explicitly says 'no rush', 'no hurry', 'no need to reply', or similar.\n"
-             + "Return only the JSON object and nothing else.\n\n"
-             + "MESSAGE:\n" + text;
+           var prompt = "Extract the following fields from the message: name, email, phone, bookingId, airbnbId, amount, urgent.\n"
+               + "Return ONLY valid JSON with keys: name, email, phone, bookingId, airbnbId, amount, urgent. Use null when missing for strings and false for `urgent`.\n"
+               + "If present, return `amount` as the full currency string (for example: '₱2,483.65 PHP').\n"
+               + "`urgent` should be a boolean: true for any question the guest asks or any request that requires a reply or action (even if not immediate).\n"
+               + "Treat interrogative sentences and explicit questions as urgent. Do NOT rely on code-side heuristics; determine `urgent` based on the content.\n"
+               + "Do NOT mark as urgent when the sender explicitly says 'no rush', 'no hurry', 'no need to reply', or similar.\n"
+               + "Return only the JSON object and nothing else.\n\n"
+               + "Examples:\n"
+               + "Input: 'Hi, can we leave our bags outside the room tomorrow?'\n"
+               + "Output: {\"name\":null,\"email\":null,\"phone\":null,\"bookingId\":null,\"airbnbId\":null,\"amount\":null,\"urgent\":true}\n\n"
+               + "Input: 'Thanks for the heads up, see you then.'\n"
+               + "Output: {\"name\":null,\"email\":null,\"phone\":null,\"bookingId\":null,\"airbnbId\":null,\"amount\":null,\"urgent\":false}\n\n"
+               + "Input: 'Payment of ₱1,200 was made.'\n"
+               + "Output: {\"name\":null,\"email\":null,\"phone\":null,\"bookingId\":null,\"airbnbId\":null,\"amount\":\"₱1,200\",\"urgent\":false}\n\n"
+               + "MESSAGE:\n" + text;
 
         var payload = new
         {
@@ -213,7 +220,33 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
             {
                 var opt = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                 var parsed = JsonSerializer.Deserialize<IdentifierResult>(cleaned, opt);
-                if (parsed != null) return parsed;
+                if (parsed != null)
+                {
+                    // Heuristic fallback: if model returned non-urgent but the original message contains
+                    // a question or permission request, mark as urgent.
+                    if (!parsed.Urgent)
+                    {
+                        var qPattern = new System.Text.RegularExpressions.Regex(@"\?|\b(can|may|ask|mag\s+ask|pwede|pwede\s+ba|okay\s+lang|iwan|leave|allow|permit|pwedeng)\b",
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+                        if (qPattern.IsMatch(text))
+                        {
+                            parsed = parsed with { Urgent = true };
+                            _logger.LogInformation("Marked message as urgent by heuristic fallback.");
+                        }
+                    }
+
+                    return parsed;
+                }
+                else
+                {
+                    // If we couldn't parse but the original text is clearly a question, return urgent
+                    var qPattern = new System.Text.RegularExpressions.Regex(@"\?|\b(can|may|ask|mag\s+ask|pwede|pwede\s+ba|okay\s+lang|iwan|leave|allow|permit|pwedeng)\b",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+                    if (qPattern.IsMatch(text))
+                    {
+                        return new IdentifierResult(null, null, null, null, null, null, true);
+                    }
+                }
             }
             catch (Exception ex)
             {
