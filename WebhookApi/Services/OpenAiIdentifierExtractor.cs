@@ -42,6 +42,7 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                + "`urgent` should be a boolean: true for any question the guest asks or any request that requires a reply or action (even if not immediate).\n"
                + "Treat interrogative sentences and explicit questions as urgent. Do NOT rely on code-side heuristics; determine `urgent` based on the content.\n"
                + "Do NOT mark as urgent when the sender explicitly says 'no rush', 'no hurry', 'no need to reply', or similar.\n"
+               + "If the message includes a standalone name on its own line or a header like \"Respond to NAME's inquiry\", set \"name\" to that NAME.\n"
                + "Return only the JSON object and nothing else.\n\n"
                + "Examples:\n"
                + "Input: 'Hi, can we leave our bags outside the room tomorrow?'\n"
@@ -235,6 +236,24 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                         }
                     }
 
+                    // Fallback: if name is missing from the model output, try to extract a sender name
+                    // from the original message text (handles standalone names or headers like "Respond to NAME").
+                    if (string.IsNullOrWhiteSpace(parsed.Name))
+                    {
+                        var namePattern = new System.Text.RegularExpressions.Regex(
+                            @"(?m)^\s*Respond to(?:'s|’s|\:)?\s*([A-Z][\p{L}\-']+(?:\s+[A-Z][\p{L}\-']+)*)|(?m)^\s*([A-Z][\p{L}\-']+(?:\s+[A-Z][\p{L}\-']+)*)\s*$",
+                            System.Text.RegularExpressions.RegexOptions.Compiled);
+                        var m = namePattern.Match(text ?? string.Empty);
+                        if (m.Success)
+                        {
+                            var name = !string.IsNullOrEmpty(m.Groups[1].Value) ? m.Groups[1].Value : m.Groups[2].Value;
+                            if (!string.IsNullOrWhiteSpace(name))
+                            {
+                                parsed = parsed with { Name = name.Trim() };
+                                _logger.LogInformation("Filled missing name from text fallback: {Name}", name);
+                            }
+                        }
+                    }
                     return parsed;
                 }
                 else
