@@ -2,6 +2,7 @@ using System;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
@@ -29,8 +30,15 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
         _provider = (config["AI:Provider"] ?? "auto").ToLowerInvariant();
     }
 
-    public async Task<IdentifierResult> ExtractAsync(string text, CancellationToken cancellationToken = default)
+        public async Task<IdentifierResult> ExtractAsync(string text, CancellationToken cancellationToken = default)
     {
+        // Local helper: detect amount/currency-like strings to avoid mis-classification as a name
+        static bool LooksLikeAmount(string? s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            return Regex.IsMatch(s, @"[\p{Sc}]|\b(PHP|USD|EUR|SGD)\b|\d{1,3}(?:[,\.]\d{3})*(?:[,.]\d+)?",
+                RegexOptions.IgnoreCase);
+        }
         // Require API key only when explicitly configured to use OpenAI, or when auto-detection
         // determines we are calling a remote OpenAI endpoint.
         // If provider is 'ollama' or 'local', allow missing API key for local usage.
@@ -43,6 +51,7 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                + "Treat interrogative sentences and explicit questions as urgent. Do NOT rely on code-side heuristics; determine `urgent` based on the content.\n"
                + "Do NOT mark as urgent when the sender explicitly says 'no rush', 'no hurry', 'no need to reply', or similar.\n"
                + "If the message includes a standalone name on its own line or a header like \"Respond to NAME's inquiry\", set \"name\" to that NAME.\n"
+               + "IMPORTANT: `name` MUST be a human name containing alphabetic characters, spaces, hyphens or apostrophes only. Do NOT place currency amounts, currency symbols (e.g. ₱), numeric-only tokens, account IDs, or the word `PHP` into `name`. Monetary values must be returned in `amount`.\n"
                + "Return only the JSON object and nothing else.\n\n"
                + "Examples:\n"
                + "Input: 'Hi, can we leave our bags outside the room tomorrow?'\n"
@@ -217,55 +226,64 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                 cleaned = cleaned.Substring(firstBrace, lastBrace - firstBrace + 1);
             }
 
-            try
-            {
-                var opt = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                var parsed = JsonSerializer.Deserialize<IdentifierResult>(cleaned, opt);
-                if (parsed != null)
+                try
                 {
-                    // Heuristic fallback: if model returned non-urgent but the original message contains
-                    // a question or permission request, mark as urgent.
-                    if (!parsed.Urgent)
+                    var opt = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    var parsed = JsonSerializer.Deserialize<IdentifierResult>(cleaned, opt);
+                    if (parsed != null)
                     {
+                        // Defensive fix: if the model accidentally put an amount/currency in the `name` field,
+                        // move it into `Amount` so the name-fallback can run and we don't persist currency as name.
+                        if (!string.IsNullOrWhiteSpace(parsed.Name) && LooksLikeAmount(parsed.Name))
+                        {
+                            var movedAmount = parsed.Name.Trim();
+                            parsed = parsed with { Name = null, Amount = string.IsNullOrWhiteSpace(parsed.Amount) ? movedAmount : parsed.Amount };
+                            _logger.LogInformation("Moved amount-like Name into Amount: {Amount}", movedAmount);
+                        }
+
+                        // Heuristic fallback: if model returned non-urgent but the original message contains
+                        // a question or permission request, mark as urgent.
+                        if (!parsed.Urgent)
+                        {
+                            var qPattern = new System.Text.RegularExpressions.Regex(@"\?|\b(can|may|ask|mag\s+ask|pwede|pwede\s+ba|okay\s+lang|iwan|leave|allow|permit|pwedeng)\b",
+                                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+                            if (qPattern.IsMatch(text))
+                            {
+                                parsed = parsed with { Urgent = true };
+                                _logger.LogInformation("Marked message as urgent by heuristic fallback.");
+                            }
+                        }
+
+                        // Fallback: if name is missing from the model output, try to extract a sender name
+                        // from the original message text (handles standalone names or headers like "Respond to NAME").
+                        if (string.IsNullOrWhiteSpace(parsed.Name))
+                        {
+                            var namePattern = new System.Text.RegularExpressions.Regex(
+                                @"(?m)^\s*Respond to(?:'s|’s|\:)?\s*([A-Z][\p{L}\-']+(?:\s+[A-Z][\p{L}\-']+)*)|(?m)^\s*([A-Z][\p{L}\-']+(?:\s+[A-Z][\p{L}\-']+)*)\s*$",
+                                System.Text.RegularExpressions.RegexOptions.Compiled);
+                            var m = namePattern.Match(text ?? string.Empty);
+                            if (m.Success)
+                            {
+                                var name = !string.IsNullOrEmpty(m.Groups[1].Value) ? m.Groups[1].Value : m.Groups[2].Value;
+                                if (!string.IsNullOrWhiteSpace(name))
+                                {
+                                    parsed = parsed with { Name = name.Trim() };
+                                    _logger.LogInformation("Filled missing name from text fallback: {Name}", name);
+                                }
+                            }
+                        }
+                        return parsed;
+                    }
+                    else
+                    {
+                        // If we couldn't parse but the original text is clearly a question, return urgent
                         var qPattern = new System.Text.RegularExpressions.Regex(@"\?|\b(can|may|ask|mag\s+ask|pwede|pwede\s+ba|okay\s+lang|iwan|leave|allow|permit|pwedeng)\b",
                             System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
                         if (qPattern.IsMatch(text))
                         {
-                            parsed = parsed with { Urgent = true };
-                            _logger.LogInformation("Marked message as urgent by heuristic fallback.");
+                            return new IdentifierResult(null, null, null, null, null, null, true);
                         }
                     }
-
-                    // Fallback: if name is missing from the model output, try to extract a sender name
-                    // from the original message text (handles standalone names or headers like "Respond to NAME").
-                    if (string.IsNullOrWhiteSpace(parsed.Name))
-                    {
-                        var namePattern = new System.Text.RegularExpressions.Regex(
-                            @"(?m)^\s*Respond to(?:'s|’s|\:)?\s*([A-Z][\p{L}\-']+(?:\s+[A-Z][\p{L}\-']+)*)|(?m)^\s*([A-Z][\p{L}\-']+(?:\s+[A-Z][\p{L}\-']+)*)\s*$",
-                            System.Text.RegularExpressions.RegexOptions.Compiled);
-                        var m = namePattern.Match(text ?? string.Empty);
-                        if (m.Success)
-                        {
-                            var name = !string.IsNullOrEmpty(m.Groups[1].Value) ? m.Groups[1].Value : m.Groups[2].Value;
-                            if (!string.IsNullOrWhiteSpace(name))
-                            {
-                                parsed = parsed with { Name = name.Trim() };
-                                _logger.LogInformation("Filled missing name from text fallback: {Name}", name);
-                            }
-                        }
-                    }
-                    return parsed;
-                }
-                else
-                {
-                    // If we couldn't parse but the original text is clearly a question, return urgent
-                    var qPattern = new System.Text.RegularExpressions.Regex(@"\?|\b(can|may|ask|mag\s+ask|pwede|pwede\s+ba|okay\s+lang|iwan|leave|allow|permit|pwedeng)\b",
-                        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
-                    if (qPattern.IsMatch(text))
-                    {
-                        return new IdentifierResult(null, null, null, null, null, null, true);
-                    }
-                }
             }
             catch (Exception ex)
             {

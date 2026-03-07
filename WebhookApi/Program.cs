@@ -81,6 +81,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
 builder.Services.AddScoped<IRuleRepository, RuleRepository>();
+// RAG ingestion service
+builder.Services.AddScoped<WebhookApi.Services.IRagIngestService, WebhookApi.Services.RagIngestService>();
 
 // Add HttpClient support
 builder.Services.AddHttpClient();
@@ -303,6 +305,66 @@ try
         return Results.Ok("Webhook received and forwarded to Telegram (and SMS if configured)");
     })
     .WithName("ProcessSmsWebhook");
+
+    // RAG document upload endpoint
+    app.MapPost("/api/rag/upload", async (HttpRequest request, WebhookApi.Services.IRagIngestService ingest, ILogger<Program> logger, CancellationToken ct) =>
+    {
+        string title = string.Empty;
+        string source = string.Empty;
+        string text = string.Empty;
+
+        if (request.HasFormContentType)
+        {
+            var form = await request.ReadFormAsync(ct);
+            title = form["title"].FirstOrDefault() ?? string.Empty;
+            source = form["source"].FirstOrDefault() ?? string.Empty;
+            var file = form.Files.FirstOrDefault();
+            if (file != null)
+            {
+                using var sr = new StreamReader(file.OpenReadStream());
+                text = await sr.ReadToEndAsync();
+            }
+            else
+            {
+                text = form["text"].FirstOrDefault() ?? string.Empty;
+            }
+        }
+        else
+        {
+            // Try to read JSON body { title, source, text }
+            using var sr = new StreamReader(request.Body);
+            var body = await sr.ReadToEndAsync();
+            if (!string.IsNullOrWhiteSpace(body))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(body);
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("title", out var t)) title = t.GetString() ?? string.Empty;
+                    if (root.TryGetProperty("source", out var s)) source = s.GetString() ?? string.Empty;
+                    if (root.TryGetProperty("text", out var txt)) text = txt.GetString() ?? string.Empty;
+                }
+                catch
+                {
+                    // fallback: raw body is text
+                    text = body;
+                }
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(text)) return Results.BadRequest(new { error = "no text uploaded" });
+
+        try
+        {
+            var id = await ingest.IngestDocumentAsync(string.IsNullOrWhiteSpace(title) ? "uploaded" : title, string.IsNullOrWhiteSpace(source) ? "upload" : source, text, ct);
+            return Results.Accepted($"/api/rag/{id}", new { documentId = id });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to ingest document");
+            return Results.Problem("ingest failed");
+        }
+    });
 
     app.Run();
 
