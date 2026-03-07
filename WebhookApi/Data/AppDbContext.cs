@@ -26,6 +26,26 @@ namespace WebhookApi.Data
             RagChunks = Set<RedwoodIloilo.Common.Entities.RagChunk>();
         }
 
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+
+            // The `RagChunk` type (from RedwoodIloilo.Common.Entities) may expose an `Embedding` property
+            // of type `Pgvector.Vector` which EF Core cannot bind because the type has no mappable
+            // constructor parameters. We ignore this property so EF won't try to map it as an entity
+            // property; embeddings are already stored in `MetadataJson` as a fallback.
+            try
+            {
+                var ragChunkType = typeof(RedwoodIloilo.Common.Entities.RagChunk);
+                modelBuilder.Entity(ragChunkType).Ignore("Embedding");
+            }
+            catch
+            {
+                // Swallow any error here to avoid crashing model creation if the type isn't present
+                // in some environments (e.g., trimmed builds). Prefer logging at higher levels.
+            }
+        }
+
         // DbSet properties are non-nullable and assigned in the constructor via Set<T>().
         public DbSet<GuestMessage> GuestMessages { get; set; }
         public DbSet<GuestResponse> GuestResponses { get; set; }
