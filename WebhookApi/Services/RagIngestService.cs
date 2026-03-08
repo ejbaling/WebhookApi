@@ -46,6 +46,35 @@ namespace WebhookApi.Services
                 Tags = tags ?? Array.Empty<string>()
             };
 
+            // Ensure MetadataJson is stored as a JSON-typed CLR value when the entity exposes
+            // a JSON-backed property (e.g. JsonDocument/JsonElement/object). This avoids
+            // Npgsql sending a text parameter for a jsonb column which causes a Postgres error.
+            try
+            {
+                var metaProp = doc.GetType().GetProperty("MetadataJson");
+                if (metaProp != null && metaProp.CanWrite)
+                {
+                    var propType = metaProp.PropertyType;
+                    if (propType == typeof(System.Text.Json.JsonDocument))
+                    {
+                        metaProp.SetValue(doc, System.Text.Json.JsonDocument.Parse("{}"));
+                    }
+                    else if (propType == typeof(System.Text.Json.JsonElement))
+                    {
+                        metaProp.SetValue(doc, System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>("{}"));
+                    }
+                    else if (propType == typeof(object))
+                    {
+                        // set a plain JsonElement which EF/Npgsql can map to jsonb
+                        metaProp.SetValue(doc, System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>("{}"));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Unable to set MetadataJson property via reflection; continuing without explicit JSON value.");
+            }
+
             _db.Add(doc);
             await _db.SaveChangesAsync(cancellationToken);
 
