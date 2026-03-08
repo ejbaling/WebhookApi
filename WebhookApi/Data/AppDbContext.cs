@@ -77,6 +77,17 @@ namespace WebhookApi.Data
 
             try
             {
+                // If RagChunk exposes a CLR MetadataJson property (likely as string),
+                // ignore it so we don't map the CLR string to the jsonb column.
+                try
+                {
+                    modelBuilder.Entity(typeof(RagChunk)).Ignore("MetadataJson");
+                }
+                catch
+                {
+                    // ignore
+                }
+
                 const string chunkShadow = "_MetadataJsonShadow";
                 modelBuilder.Entity(typeof(RagChunk))
                     .Property(typeof(System.Text.Json.JsonDocument), chunkShadow)
