@@ -127,6 +127,27 @@ namespace WebhookApi.Services
 
             // Add chunks via DbContext (untyped AddRange works)
             _db.AddRange(chunkObjects);
+            try
+            {
+                // Ensure each chunk has a jsonb-typed MetadataJson shadow value so Postgres
+                // doesn't receive a plain text parameter for the jsonb column.
+                foreach (var ch in chunkObjects)
+                {
+                    try
+                    {
+                        _db.Entry(ch).Property("_MetadataJsonShadow").CurrentValue = System.Text.Json.JsonDocument.Parse("{}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Failed to set MetadataJson shadow for chunk {ChunkId}", ch.Id);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed setting chunk metadata shadows");
+            }
+
             await _db.SaveChangesAsync(cancellationToken);
 
             return docId;

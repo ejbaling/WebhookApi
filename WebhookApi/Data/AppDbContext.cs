@@ -74,6 +74,20 @@ namespace WebhookApi.Data
             {
                 // Ignore mapping failures (e.g., if RagDocument type is different at runtime)
             }
+
+            try
+            {
+                const string chunkShadow = "_MetadataJsonShadow";
+                modelBuilder.Entity(typeof(RagChunk))
+                    .Property(typeof(System.Text.Json.JsonDocument), chunkShadow)
+                    .HasColumnName("MetadataJson")
+                    .HasColumnType("jsonb")
+                    .IsRequired(false);
+            }
+            catch
+            {
+                // Ignore mapping failures for RagChunk
+            }
         }
 
         // DbSet properties are non-nullable and assigned in the constructor via Set<T>().
