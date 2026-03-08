@@ -205,6 +205,7 @@ namespace WebhookApi.Services
             {
                 if (isOllama)
                 {
+                    _logger.LogInformation("Using Ollama-compatible embedding request flow (endpoint={Endpoint}; model={Model})", endpoint, model);
                     // Ollama expects single-prompt requests. Call per input and read { "embedding": [...] } responses.
                     int idx = 0;
                     foreach (var text in inputs)
@@ -256,6 +257,8 @@ namespace WebhookApi.Services
                                 _logger.LogWarning("Embedding service returned unexpected shape for Ollama request (endpoint={Endpoint}; body={Body})", endpoint, responseBody);
                                 result[idx++] = Array.Empty<double>();
                             }
+
+                            _logger.LogInformation("Received embedding for input {Index} from Ollama (endpoint={Endpoint}; embedding_length={Length})", idx - 1, endpoint, result[idx - 1].Length);
                         }
                         catch (JsonException jex)
                         {
