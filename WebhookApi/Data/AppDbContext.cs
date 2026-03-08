@@ -22,8 +22,8 @@ namespace WebhookApi.Data
             GuestAssessments = Set<GuestAssessment>();
             GuestPayments = Set<GuestPayment>();
             // RAG-related sets (types come from the RedwoodIloilo.Common.Entities NuGet package)
-            RagDocuments = Set<RedwoodIloilo.Common.Entities.RagDocument>();
-            RagChunks = Set<RedwoodIloilo.Common.Entities.RagChunk>();
+            RagDocuments = Set<RagDocument>();
+            RagChunks = Set<RagChunk>();
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -36,7 +36,7 @@ namespace WebhookApi.Data
             // property; embeddings are already stored in `MetadataJson` as a fallback.
             try
             {
-                var ragChunkType = typeof(RedwoodIloilo.Common.Entities.RagChunk);
+                var ragChunkType = typeof(RagChunk);
                 modelBuilder.Entity(ragChunkType).Ignore("Embedding");
             }
             catch
@@ -54,7 +54,7 @@ namespace WebhookApi.Data
         public DbSet<RuleCategory> RuleCategories { get; set; }
         public DbSet<GuestAssessment> GuestAssessments { get; set; }
         public DbSet<GuestPayment> GuestPayments { get; set; }
-        public DbSet<RedwoodIloilo.Common.Entities.RagDocument> RagDocuments { get; set; }
-        public DbSet<RedwoodIloilo.Common.Entities.RagChunk> RagChunks { get; set; }
+        public DbSet<RagDocument> RagDocuments { get; set; }
+        public DbSet<RagChunk> RagChunks { get; set; }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -29,23 +30,21 @@ namespace WebhookApi.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public async Task<Guid> IngestDocumentAsync(string title, string source, string text, CancellationToken cancellationToken = default)
+        public async Task<Guid> IngestDocumentAsync(string title, string source, string text, string[]? tags = null, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException("text is required", nameof(text));
 
             var docId = Guid.NewGuid();
 
-            // Create and insert a RagDocument instance using the NuGet-provided type via reflection-safe population
-            var doc = Activator.CreateInstance(typeof(RagDocument));
-            var docType = doc!.GetType();
-            var idProp = docType.GetProperty("Id");
-            idProp?.SetValue(doc, docId);
-            var titleProp = docType.GetProperty("Title");
-            titleProp?.SetValue(doc, title ?? string.Empty);
-            var sourceProp = docType.GetProperty("Source");
-            sourceProp?.SetValue(doc, source ?? string.Empty);
-            var createdProp = docType.GetProperty("CreatedAt");
-            createdProp?.SetValue(doc, DateTime.UtcNow);
+            // Create and insert a typed RagDocument instance and assign Tags directly
+            var doc = new RagDocument
+            {
+                Id = docId,
+                Title = title ?? string.Empty,
+                Source = source ?? string.Empty,
+                CreatedAt = DateTime.UtcNow,
+                Tags = tags ?? Array.Empty<string>()
+            };
 
             _db.Add(doc);
             await _db.SaveChangesAsync(cancellationToken);
@@ -53,63 +52,37 @@ namespace WebhookApi.Services
             // Chunk the text
             var chunks = ChunkText(text, maxWords: 450).Select((chunkText, idx) => new { Index = idx, Text = chunkText }).ToList();
 
-            // Get embeddings from configured AI provider
+            // Get embeddings from configured AI provider (id-mapped)
             var vectors = await GetEmbeddingsAsync(chunks.Select(c => c.Text).ToList(), cancellationToken);
 
-            var chunkObjects = new List<object>();
-            var chunkType = typeof(RagChunk);
+            var chunkObjects = new List<RagChunk>();
 
-            for (int i = 0; i < chunks.Count; i++)
+            foreach (var c in chunks)
             {
-                var chunkObj = Activator.CreateInstance(chunkType)!;
-                var pId = chunkType.GetProperty("Id");
-                pId?.SetValue(chunkObj, Guid.NewGuid());
-                var pDocId = chunkType.GetProperty("RagDocumentId");
-                pDocId?.SetValue(chunkObj, docId);
-                var pIndex = chunkType.GetProperty("ChunkIndex");
-                if (pIndex == null) pIndex = chunkType.GetProperty("ChunkIdx") ?? chunkType.GetProperty("Ordinal");
-                pIndex?.SetValue(chunkObj, i);
-                var pText = chunkType.GetProperty("Text");
-                pText?.SetValue(chunkObj, chunks[i].Text);
-                var pCreated = chunkType.GetProperty("CreatedAt");
-                pCreated?.SetValue(chunkObj, DateTime.UtcNow);
+                var chunk = new RagChunk
+                {
+                    Id = Guid.NewGuid(),
+                    RagDocumentId = docId,
+                    ChunkIndex = c.Index,
+                    Text = c.Text,
+                    CreatedAt = DateTime.UtcNow
+                };
 
                 // Try to set the Embedding property (Pgvector.Vector) if available
-                try
+                if (vectors.TryGetValue(c.Index, out var embedding) && embedding != null && embedding.Length > 0)
                 {
-                    var embedding = vectors.ElementAtOrDefault(i);
-                    if (embedding != null)
+                    try
                     {
-                        var floatArray = embedding.Select(d => (float)d).ToArray();
-                        var vec = new Vector(floatArray);
-                        var pEmbedding = chunkType.GetProperty("Embedding");
-                        pEmbedding?.SetValue(chunkObj, vec);
+                        var floatArray = Array.ConvertAll(embedding, d => (float)d);
+                        chunk.Embedding = new Vector(floatArray);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to assign embedding for chunk {Index}", c.Index);
                     }
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to assign embedding for chunk {Index}", i);
-                }
 
-                // Optionally store embedding as JSON in MetadataJson for compatibility
-                try
-                {
-                    var metaProp = chunkType.GetProperty("MetadataJson");
-                    if (metaProp != null)
-                    {
-                        var emb = vectors.ElementAtOrDefault(i);
-                        if (emb != null)
-                        {
-                            metaProp.SetValue(chunkObj, JsonSerializer.Serialize(emb));
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug(ex, "Failed to set MetadataJson for chunk {Index}", i);
-                }
-
-                chunkObjects.Add(chunkObj!);
+                chunkObjects.Add(chunk);
             }
 
             // Add chunks via DbContext (untyped AddRange works)
@@ -139,9 +112,13 @@ namespace WebhookApi.Services
             if (sb.Length > 0) yield return sb.ToString().Trim();
         }
 
-        private async Task<List<double[]>> GetEmbeddingsAsync(List<string> inputs, CancellationToken cancellationToken)
+        private async Task<Dictionary<int, double[]>> GetEmbeddingsAsync(List<string> inputs, CancellationToken cancellationToken)
         {
-            if (inputs == null || inputs.Count == 0) return new List<double[]>();
+            if (inputs == null || inputs.Count == 0)
+            {
+                var empty = new Dictionary<int, double[]>();
+                return empty;
+            }
 
             var endpoint = _config["AI:Endpoint"]?.TrimEnd('/') ?? "http://10.0.0.106:11434";
             var apiKey = _config["AI:ApiKey"] ?? string.Empty;
@@ -154,7 +131,8 @@ namespace WebhookApi.Services
                 client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 
             var requestUri = embeddingPath.StartsWith("/") ? embeddingPath : "/" + embeddingPath;
-            var payload = new { model = model, input = inputs };
+            // Send inputs with ids so the provider can preserve or return them
+            var payload = new { model = model, input = inputs.Select((t, idx) => new { id = idx, text = t }).ToList() };
 
             try
             {
@@ -163,28 +141,74 @@ namespace WebhookApi.Services
                 {
                     var body = await resp.Content.ReadAsStringAsync(cancellationToken);
                     _logger.LogWarning("Embedding request failed: {Status} {Body}", resp.StatusCode, body);
-                    return inputs.Select(_ => Array.Empty<double>()).ToList();
+                    return Enumerable.Range(0, inputs.Count).ToDictionary(i => i, _ => Array.Empty<double>());
                 }
 
                 using var stream = await resp.Content.ReadAsStreamAsync(cancellationToken);
                 using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
                 var root = doc.RootElement;
-                var result = new List<double[]>();
+                // Diagnose response shape to help triage missing/short responses
+                string responseShape;
+                if (root.ValueKind == JsonValueKind.Object)
+                {
+                    if (root.TryGetProperty("data", out var _data) && _data.ValueKind == JsonValueKind.Array) responseShape = $"object.data[{_data.GetArrayLength()}]";
+                    else if (root.TryGetProperty("embeddings", out var _embs) && _embs.ValueKind == JsonValueKind.Array) responseShape = $"object.embeddings[{_embs.GetArrayLength()}]";
+                    else if (root.TryGetProperty("embedding", out _)) responseShape = "object.single_embedding";
+                    else responseShape = "object.unknown";
+                }
+                else if (root.ValueKind == JsonValueKind.Array)
+                {
+                    if (root.GetArrayLength() > 0 && root[0].ValueKind == JsonValueKind.Array) responseShape = $"array_of_arrays[{root.GetArrayLength()}]";
+                    else if (root.GetArrayLength() > 0 && root[0].ValueKind == JsonValueKind.Object) responseShape = $"array_of_objects[{root.GetArrayLength()}]";
+                    else responseShape = $"array[{root.GetArrayLength()}]";
+                }
+                else
+                {
+                    responseShape = $"other:{root.ValueKind}";
+                }
+                var result = new Dictionary<int, double[]>();
+
+                static int? ReadId(JsonElement item)
+                {
+                    if (item.ValueKind == JsonValueKind.Object)
+                    {
+                        if (item.TryGetProperty("id", out var idEl))
+                        {
+                            if (idEl.ValueKind == JsonValueKind.Number) return idEl.GetInt32();
+                            if (idEl.ValueKind == JsonValueKind.String && int.TryParse(idEl.GetString(), out var v)) return v;
+                        }
+                        if (item.TryGetProperty("index", out var idxEl) && idxEl.ValueKind == JsonValueKind.Number) return idxEl.GetInt32();
+                    }
+                    return null;
+                }
 
                 // OpenAI-style: { data: [ { embedding: [...] }, ... ] }
                 if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
                 {
+                    int nextIndex = 0;
                     foreach (var item in data.EnumerateArray())
                     {
                         if (item.ValueKind == JsonValueKind.Object && item.TryGetProperty("embedding", out var emb) && emb.ValueKind == JsonValueKind.Array)
                         {
-                            result.Add(ParseArrayToDoubles(emb));
+                            var embArr = ParseArrayToDoubles(emb);
+                            var id = ReadId(item) ?? nextIndex++;
+                            result[id] = embArr;
                         }
                         else
                         {
-                            result.Add(Array.Empty<double>());
+                            var id = ReadId(item) ?? nextIndex++;
+                            result[id] = Array.Empty<double>();
                         }
                     }
+                    // log if fewer embeddings returned than requested
+                    var returnedCount = result.Count(kv => kv.Value != null && kv.Value.Length > 0);
+                    if (returnedCount < inputs.Count)
+                    {
+                        _logger.LogWarning("Embedding service returned {Returned} embeddings for {Requested} inputs (endpoint={Endpoint}; shape={ResponseShape})", returnedCount, inputs.Count, endpoint, responseShape);
+                    }
+
+                    // ensure all requested ids exist (pad with empty arrays)
+                    for (int i = 0; i < inputs.Count; i++) if (!result.ContainsKey(i)) result[i] = Array.Empty<double>();
                     return result;
                 }
 
@@ -194,61 +218,100 @@ namespace WebhookApi.Services
                     // root is an array of embeddings or array of objects
                     if (root.GetArrayLength() > 0 && root[0].ValueKind == JsonValueKind.Array)
                     {
+                        int idx = 0;
                         foreach (var arr in root.EnumerateArray())
-                            result.Add(ParseArrayToDoubles(arr));
+                        {
+                            result[idx++] = ParseArrayToDoubles(arr);
+                        }
+                        // log if fewer embeddings returned than requested
+                        var returnedCountArr = result.Count(kv => kv.Value != null && kv.Value.Length > 0);
+                        if (returnedCountArr < inputs.Count)
+                        {
+                            _logger.LogWarning("Embedding service returned {Returned} embeddings for {Requested} inputs (endpoint={Endpoint}; shape={ResponseShape})", returnedCountArr, inputs.Count, endpoint, responseShape);
+                        }
+                        for (int i = idx; i < inputs.Count; i++) if (!result.ContainsKey(i)) result[i] = Array.Empty<double>();
                         return result;
                     }
                     else if (root.GetArrayLength() > 0 && root[0].ValueKind == JsonValueKind.Object && root[0].TryGetProperty("embedding", out _))
                     {
+                        int nextIndex = 0;
                         foreach (var item in root.EnumerateArray())
                         {
-                            if (item.TryGetProperty("embedding", out var emb)) result.Add(ParseArrayToDoubles(emb));
-                            else result.Add(Array.Empty<double>());
+                            var id = ReadId(item) ?? nextIndex++;
+                            if (item.TryGetProperty("embedding", out var emb)) result[id] = ParseArrayToDoubles(emb);
+                            else result[id] = Array.Empty<double>();
                         }
+                        // log if fewer embeddings returned than requested
+                        var returnedCountObj = result.Count(kv => kv.Value != null && kv.Value.Length > 0);
+                        if (returnedCountObj < inputs.Count)
+                        {
+                            _logger.LogWarning("Embedding service returned {Returned} embeddings for {Requested} inputs (endpoint={Endpoint}; shape={ResponseShape})", returnedCountObj, inputs.Count, endpoint, responseShape);
+                        }
+                        for (int i = 0; i < inputs.Count; i++) if (!result.ContainsKey(i)) result[i] = Array.Empty<double>();
                         return result;
                     }
                 }
 
                 if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("embeddings", out var embs) && embs.ValueKind == JsonValueKind.Array)
                 {
-                    foreach (var arr in embs.EnumerateArray()) result.Add(ParseArrayToDoubles(arr));
+                    int idx = 0;
+                    foreach (var arr in embs.EnumerateArray()) result[idx++] = ParseArrayToDoubles(arr);
+                    var returnedCountEmbs = result.Count(kv => kv.Value != null && kv.Value.Length > 0);
+                    if (returnedCountEmbs < inputs.Count)
+                    {
+                        _logger.LogWarning("Embedding service returned {Returned} embeddings for {Requested} inputs (endpoint={Endpoint}; shape={ResponseShape})", returnedCountEmbs, inputs.Count, endpoint, responseShape);
+                    }
+                    for (int i = idx; i < inputs.Count; i++) if (!result.ContainsKey(i)) result[i] = Array.Empty<double>();
                     return result;
                 }
 
                 // Single embedding returned as { embedding: [...] }
                 if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("embedding", out var singleEmb) && singleEmb.ValueKind == JsonValueKind.Array)
                 {
-                    result.Add(ParseArrayToDoubles(singleEmb));
+                    result[0] = ParseArrayToDoubles(singleEmb);
+                    var returnedCountSingle = result.Count(kv => kv.Value != null && kv.Value.Length > 0);
+                    if (returnedCountSingle < inputs.Count)
+                    {
+                        _logger.LogWarning("Embedding service returned {Returned} embeddings for {Requested} inputs (endpoint={Endpoint}; shape={ResponseShape})", returnedCountSingle, inputs.Count, endpoint, responseShape);
+                    }
+                    for (int i = 1; i < inputs.Count; i++) if (!result.ContainsKey(i)) result[i] = Array.Empty<double>();
                     return result;
                 }
 
-                // Fallback: return empty vectors
-                _logger.LogWarning("Embedding response shape not recognized; returning empty vectors");
-                return inputs.Select(_ => Array.Empty<double>()).ToList();
+                // Fallback: return empty vectors for all inputs
+                _logger.LogWarning("Embedding response shape not recognized; returning empty vectors (shape={ResponseShape})", responseShape);
+                return Enumerable.Range(0, inputs.Count).ToDictionary(i => i, _ => Array.Empty<double>());
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to call embedding API");
-                return inputs.Select(_ => Array.Empty<double>()).ToList();
+                return Enumerable.Range(0, inputs.Count).ToDictionary(i => i, _ => Array.Empty<double>());
             }
 
             static double[] ParseArrayToDoubles(JsonElement arr)
             {
-                var list = new List<double>();
                 if (arr.ValueKind != JsonValueKind.Array) return Array.Empty<double>();
+                var list = new List<double>();
                 foreach (var v in arr.EnumerateArray())
                 {
-                    try
+                    if (v.ValueKind == JsonValueKind.Number)
                     {
-                        list.Add(v.GetDouble());
+                        // Prefer TryGetDouble for safety
+                        if (v.TryGetDouble(out var d)) list.Add(d);
+                        else
+                        {
+                            try { list.Add((double)v.GetDecimal()); } catch { }
+                        }
                     }
-                    catch
+                    else if (v.ValueKind == JsonValueKind.String)
                     {
-                        // try as float
-                        try { list.Add((double)v.GetDecimal()); } catch { }
+                        var s = v.GetString();
+                        if (!string.IsNullOrWhiteSpace(s) && double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
+                            list.Add(parsed);
                     }
+                    // ignore other value kinds
                 }
-                return list.ToArray();
+                return list.Count == 0 ? Array.Empty<double>() : list.ToArray();
             }
         }
     }

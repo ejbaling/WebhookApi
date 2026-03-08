@@ -6,6 +6,6 @@ namespace WebhookApi.Services
 {
     public interface IRagIngestService
     {
-        Task<Guid> IngestDocumentAsync(string title, string source, string text, CancellationToken cancellationToken = default);
+        Task<Guid> IngestDocumentAsync(string title, string source, string text, string[]? tags = null, CancellationToken cancellationToken = default);
     }
 }

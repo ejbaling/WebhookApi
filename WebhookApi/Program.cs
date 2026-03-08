@@ -312,6 +312,7 @@ try
         string title = string.Empty;
         string source = string.Empty;
         string text = string.Empty;
+        string[]? tags = null;
 
         if (request.HasFormContentType)
         {
@@ -328,10 +329,23 @@ try
             {
                 text = form["text"].FirstOrDefault() ?? string.Empty;
             }
+
+            // Extract tags from form (supports multiple fields or comma-separated)
+            var tagsRaw = form["tags"];
+            if (tagsRaw.Count > 0)
+            {
+                tags = tagsRaw
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .SelectMany(s => s!.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                    .Select(t => t.Trim())
+                    .Where(t => !string.IsNullOrWhiteSpace(t))
+                    .Select(t => t!)
+                    .ToArray();
+            }
         }
         else
         {
-            // Try to read JSON body { title, source, text }
+            // Try to read JSON body { title, source, text, tags }
             using var sr = new StreamReader(request.Body);
             var body = await sr.ReadToEndAsync();
             if (!string.IsNullOrWhiteSpace(body))
@@ -343,6 +357,25 @@ try
                     if (root.TryGetProperty("title", out var t)) title = t.GetString() ?? string.Empty;
                     if (root.TryGetProperty("source", out var s)) source = s.GetString() ?? string.Empty;
                     if (root.TryGetProperty("text", out var txt)) text = txt.GetString() ?? string.Empty;
+
+                    if (root.TryGetProperty("tags", out var tagsEl))
+                    {
+                        if (tagsEl.ValueKind == JsonValueKind.Array)
+                        {
+                            tags = tagsEl.EnumerateArray()
+                                .Select(e => e.GetString())
+                                .Where(s => !string.IsNullOrWhiteSpace(s))
+                                .Select(s => s!)
+                                .ToArray();
+                        }
+                        else if (tagsEl.ValueKind == JsonValueKind.String)
+                        {
+                            tags = tagsEl.GetString()?.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                .Select(t => t.Trim())
+                                .Where(t => t.Length > 0)
+                                .ToArray();
+                        }
+                    }
                 }
                 catch
                 {
@@ -356,7 +389,12 @@ try
 
         try
         {
-            var id = await ingest.IngestDocumentAsync(string.IsNullOrWhiteSpace(title) ? "uploaded" : title, string.IsNullOrWhiteSpace(source) ? "upload" : source, text, ct);
+            var id = await ingest.IngestDocumentAsync(
+                string.IsNullOrWhiteSpace(title) ? "uploaded" : title,
+                string.IsNullOrWhiteSpace(source) ? "upload" : source,
+                text,
+                tags: tags,
+                cancellationToken: ct);
             return Results.Accepted($"/api/rag/{id}", new { documentId = id });
         }
         catch (Exception ex)
