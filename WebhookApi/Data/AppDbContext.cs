@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using System.Text.Json;
 using RedwoodIloilo.Common.Entities;
 
 namespace WebhookApi.Data
@@ -43,6 +44,17 @@ namespace WebhookApi.Data
             {
                 // Swallow any error here to avoid crashing model creation if the type isn't present
                 // in some environments (e.g., trimmed builds). Prefer logging at higher levels.
+            }
+
+            // Map a shadow property for MetadataJson to ensure EF/Npgsql sends jsonb parameters
+            // when the column is present as jsonb in Postgres.
+            try
+            {
+                modelBuilder.Entity<RagDocument>().Property<System.Text.Json.JsonDocument>("MetadataJson").HasColumnType("jsonb");
+            }
+            catch
+            {
+                // Ignore mapping failures (e.g., if RagDocument type is different at runtime)
             }
         }
 

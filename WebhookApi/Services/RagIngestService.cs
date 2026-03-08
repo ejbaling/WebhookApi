@@ -75,8 +75,18 @@ namespace WebhookApi.Services
                 _logger.LogDebug(ex, "Unable to set MetadataJson property via reflection; continuing without explicit JSON value.");
             }
 
-            _db.Add(doc);
-            await _db.SaveChangesAsync(cancellationToken);
+                // Add the document via EF Core and set the shadow `MetadataJson` property
+                // to a JsonDocument so Npgsql sends a jsonb parameter instead of text.
+                _db.Add(doc);
+                try
+                {
+                    _db.Entry(doc).Property("MetadataJson").CurrentValue = System.Text.Json.JsonDocument.Parse("{}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Failed to set shadow MetadataJson property; proceeding with save.");
+                }
+                await _db.SaveChangesAsync(cancellationToken);
 
             // Chunk the text
             var chunks = ChunkText(text, maxWords: 450).Select((chunkText, idx) => new { Index = idx, Text = chunkText }).ToList();
