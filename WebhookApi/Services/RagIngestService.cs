@@ -183,7 +183,7 @@ namespace WebhookApi.Services
 
             var endpoint = _config["AI:Endpoint"]?.TrimEnd('/') ?? "http://10.0.0.106:11434";
             var apiKey = _config["AI:ApiKey"] ?? string.Empty;
-            var model = _config["AI:EmbeddingModel"] ?? "mxbai-embed-large:latest";
+            var model = _config["AI:EmbeddingModel"] ?? "mxbai-embed-large";
             var embeddingPath = _config["AI:EmbeddingPath"] ?? "/api/embeddings";
 
             var client = _httpFactory.CreateClient();
