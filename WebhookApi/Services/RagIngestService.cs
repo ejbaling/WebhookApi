@@ -80,7 +80,8 @@ namespace WebhookApi.Services
                 _db.Add(doc);
                 try
                 {
-                    _db.Entry(doc).Property("MetadataJson").CurrentValue = System.Text.Json.JsonDocument.Parse("{}");
+                    // Set the shadow JSON property we mapped in AppDbContext
+                    _db.Entry(doc).Property("_MetadataJsonShadow").CurrentValue = System.Text.Json.JsonDocument.Parse("{}");
                 }
                 catch (Exception ex)
                 {
