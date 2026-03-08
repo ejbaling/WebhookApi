@@ -31,19 +31,29 @@ namespace WebhookApi.Data
         {
             base.OnModelCreating(modelBuilder);
 
-            // The `RagChunk` type (from RedwoodIloilo.Common.Entities) may expose an `Embedding` property
-            // of type `Pgvector.Vector` which EF Core cannot bind because the type has no mappable
-            // constructor parameters. We ignore this property so EF won't try to map it as an entity
-            // property; embeddings are already stored in `MetadataJson` as a fallback.
+            // Try to map the `Embedding` CLR property (Pgvector.Vector) on `RagChunk` to a
+            // Postgres `vector` column so EF persists it directly. If the runtime type
+            // doesn't expose the property or mapping isn't possible, fall back silently.
             try
             {
                 var ragChunkType = typeof(RagChunk);
-                modelBuilder.Entity(ragChunkType).Ignore("Embedding");
+                modelBuilder.Entity(ragChunkType).Property(typeof(Pgvector.Vector), "Embedding")
+                    .HasColumnName("Embedding")
+                    .HasColumnType("vector")
+                    .IsRequired(false);
             }
             catch
             {
-                // Swallow any error here to avoid crashing model creation if the type isn't present
-                // in some environments (e.g., trimmed builds). Prefer logging at higher levels.
+                try
+                {
+                    // If mapping failed (e.g., property absent), ignore the CLR property to avoid
+                    // EF attempting to map an unmappable member.
+                    modelBuilder.Entity(typeof(RagChunk)).Ignore("Embedding");
+                }
+                catch
+                {
+                    // ignore any failures here
+                }
             }
 
             // If the compiled `RagDocument` type exposes a CLR `MetadataJson` property
