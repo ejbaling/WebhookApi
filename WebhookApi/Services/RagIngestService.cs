@@ -115,6 +115,7 @@ namespace WebhookApi.Services
                     {
                         var floatArray = Array.ConvertAll(embedding, d => (float)d);
                         chunk.Embedding = new Vector(floatArray);
+                        _logger.LogInformation("Assigned embedding for chunk {ChunkId} (index={Index}) of document {DocumentId}; embedding_length={Length}", chunk.Id, c.Index, docId, floatArray.Length);
                     }
                     catch (Exception ex)
                     {
@@ -149,6 +150,8 @@ namespace WebhookApi.Services
             }
 
             await _db.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Saved {ChunkCount} chunks for RagDocumentId {DocumentId}", chunkObjects.Count, docId);
 
             return docId;
         }
