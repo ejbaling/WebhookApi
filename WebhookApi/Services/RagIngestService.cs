@@ -111,6 +111,7 @@ namespace WebhookApi.Services
                 // Try to set the Embedding property (Pgvector.Vector) if available
                 if (vectors.TryGetValue(c.Index, out var embedding) && embedding != null && embedding.Length > 0)
                 {
+                    _logger.LogInformation("Received embedding for chunk {ChunkId} (index={Index}) of document {DocumentId}; embedding_length={Length}", chunk.Id, c.Index, docId, embedding.Length);
                     try
                     {
                         var floatArray = Array.ConvertAll(embedding, d => (float)d);
