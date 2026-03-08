@@ -220,8 +220,8 @@ namespace WebhookApi.Services
                             continue;
                         }
 
-                        var body = await resp.Content.ReadAsStringAsync(cancellationToken);
-                        if (string.IsNullOrWhiteSpace(body))
+                        var responseBody = await resp.Content.ReadAsStringAsync(cancellationToken);
+                        if (string.IsNullOrWhiteSpace(responseBody))
                         {
                             _logger.LogWarning("Empty response body from embedding provider (endpoint={Endpoint})", endpoint);
                             result[idx++] = Array.Empty<double>();
@@ -230,14 +230,14 @@ namespace WebhookApi.Services
 
                         try
                         {
-                            using var docO = JsonDocument.Parse(body);
+                            using var docO = JsonDocument.Parse(responseBody);
                             var rootO = docO.RootElement;
                             if (rootO.ValueKind == JsonValueKind.Object && rootO.TryGetProperty("embedding", out var emb) && emb.ValueKind == JsonValueKind.Array)
                             {
                                 var arr = ParseArrayToDoubles(emb);
                                 if (arr.Length == 0)
                                 {
-                                    _logger.LogWarning("Embedding array empty for Ollama response; raw body: {Body}", body);
+                                    _logger.LogWarning("Embedding array empty for Ollama response; raw body: {Body}", responseBody);
                                 }
                                 result[idx++] = arr;
                             }
@@ -247,19 +247,19 @@ namespace WebhookApi.Services
                                 var arr = ParseArrayToDoubles(rootO);
                                 if (arr.Length == 0)
                                 {
-                                    _logger.LogWarning("Embedding array empty for Ollama response (bare array); raw body: {Body}", body);
+                                    _logger.LogWarning("Embedding array empty for Ollama response (bare array); raw body: {Body}", responseBody);
                                 }
                                 result[idx++] = arr;
                             }
                             else
                             {
-                                _logger.LogWarning("Embedding service returned unexpected shape for Ollama request (endpoint={Endpoint}; body={Body})", endpoint, body);
+                                _logger.LogWarning("Embedding service returned unexpected shape for Ollama request (endpoint={Endpoint}; body={Body})", endpoint, responseBody);
                                 result[idx++] = Array.Empty<double>();
                             }
                         }
                         catch (JsonException jex)
                         {
-                            _logger.LogWarning(jex, "Failed to parse Ollama embedding response as JSON; raw body: {Body}", body);
+                            _logger.LogWarning(jex, "Failed to parse Ollama embedding response as JSON; raw body: {Body}", responseBody);
                             result[idx++] = Array.Empty<double>();
                         }
                     }
