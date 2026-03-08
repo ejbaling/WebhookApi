@@ -31,30 +31,8 @@ namespace WebhookApi.Data
         {
             base.OnModelCreating(modelBuilder);
 
-            // Try to map the `Embedding` CLR property (Pgvector.Vector) on `RagChunk` to a
-            // Postgres `vector` column so EF persists it directly. If the runtime type
-            // doesn't expose the property or mapping isn't possible, fall back silently.
-            try
-            {
-                var ragChunkType = typeof(RagChunk);
-                modelBuilder.Entity(ragChunkType).Property(typeof(Pgvector.Vector), "Embedding")
-                    .HasColumnName("Embedding")
-                    .HasColumnType("vector")
-                    .IsRequired(false);
-            }
-            catch
-            {
-                try
-                {
-                    // If mapping failed (e.g., property absent), ignore the CLR property to avoid
-                    // EF attempting to map an unmappable member.
-                    modelBuilder.Entity(typeof(RagChunk)).Ignore("Embedding");
-                }
-                catch
-                {
-                    // ignore any failures here
-                }
-            }
+            // Embedding is a Pgvector.Vector property; with UseVector() registered in Program.cs,
+            // EF/Npgsql maps it automatically — no explicit configuration needed here.
 
             // If the compiled `RagDocument` type exposes a CLR `MetadataJson` property
             // as `string`, ignore that CLR property and instead add a uniquely-named

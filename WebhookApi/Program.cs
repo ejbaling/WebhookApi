@@ -78,7 +78,8 @@ builder.Services.AddHostedService<WebhookApi.Services.AiTelegramService>();
 builder.Services.AddOpenApi();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres"),
+        o => o.UseVector()));
 
 builder.Services.AddScoped<IRuleRepository, RuleRepository>();
 // RAG ingestion service
