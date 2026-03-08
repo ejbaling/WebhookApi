@@ -46,11 +46,22 @@ namespace WebhookApi.Data
                 // in some environments (e.g., trimmed builds). Prefer logging at higher levels.
             }
 
-            // Map a shadow property for MetadataJson to ensure EF/Npgsql sends jsonb parameters
-            // when the column is present as jsonb in Postgres.
+            // If the compiled `RagDocument` type exposes a CLR `MetadataJson` property
+            // as `string`, EF will reject mapping it directly to jsonb. Ignore the CLR
+            // property and add a shadow `jsonb` property named `MetadataJson` so we
+            // can set it via the ChangeTracker as a JsonDocument at runtime.
             try
             {
-                modelBuilder.Entity<RagDocument>().Property<System.Text.Json.JsonDocument>("MetadataJson").HasColumnType("jsonb");
+                modelBuilder.Entity(typeof(RagDocument)).Ignore("MetadataJson");
+            }
+            catch
+            {
+                // ignore if ignore fails
+            }
+
+            try
+            {
+                modelBuilder.Entity(typeof(RagDocument)).Property(typeof(System.Text.Json.JsonDocument), "MetadataJson").HasColumnType("jsonb");
             }
             catch
             {
