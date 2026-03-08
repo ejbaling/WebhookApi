@@ -192,22 +192,75 @@ namespace WebhookApi.Services
                 client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 
             var requestUri = embeddingPath.StartsWith("/") ? embeddingPath : "/" + embeddingPath;
-            // Send inputs with ids so the provider can preserve or return them
-            var payload = new { model = model, input = inputs.Select((t, idx) => new { id = idx, text = t }).ToList() };
+
+            // Detect Ollama-like endpoints/models which expect a single `prompt` per request
+            var isOllama = endpoint.Contains("ollama", StringComparison.OrdinalIgnoreCase)
+                           || endpoint.Contains(":11434")
+                           || model.Contains("mxbai", StringComparison.OrdinalIgnoreCase)
+                           || model.Contains("ollama", StringComparison.OrdinalIgnoreCase);
+
+            var result = new Dictionary<int, double[]>();
 
             try
             {
-                using var resp = await client.PostAsJsonAsync(requestUri, payload, cancellationToken);
-                if (!resp.IsSuccessStatusCode)
+                if (isOllama)
                 {
-                    var body = await resp.Content.ReadAsStringAsync(cancellationToken);
-                    _logger.LogWarning("Embedding request failed: {Status} {Body}", resp.StatusCode, body);
+                    // Ollama expects single-prompt requests. Call per input and read { "embedding": [...] } responses.
+                    int idx = 0;
+                    foreach (var text in inputs)
+                    {
+                        var singleReq = new { model = model, prompt = text };
+                        using var resp = await client.PostAsJsonAsync(requestUri, singleReq, cancellationToken);
+                        if (!resp.IsSuccessStatusCode)
+                        {
+                            var body = await resp.Content.ReadAsStringAsync(cancellationToken);
+                            _logger.LogWarning("Embedding request failed (ollama): {Status} {Body}", resp.StatusCode, body);
+                            // ensure index exists as empty
+                            result[idx++] = Array.Empty<double>();
+                            continue;
+                        }
+
+                        using var stream = await resp.Content.ReadAsStreamAsync(cancellationToken);
+                        using var docO = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+                        var rootO = docO.RootElement;
+                        if (rootO.ValueKind == JsonValueKind.Object && rootO.TryGetProperty("embedding", out var emb) && emb.ValueKind == JsonValueKind.Array)
+                        {
+                            result[idx++] = ParseArrayToDoubles(emb);
+                        }
+                        else if (rootO.ValueKind == JsonValueKind.Array && rootO.GetArrayLength() > 0 && rootO[0].ValueKind == JsonValueKind.Number)
+                        {
+                            // Some Ollama variants return a bare array
+                            result[idx++] = ParseArrayToDoubles(rootO);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Embedding service returned unexpected shape for Ollama request (endpoint={Endpoint})", endpoint);
+                            result[idx++] = Array.Empty<double>();
+                        }
+                    }
+
+                    // pad any missing
+                    for (int i = 0; i < inputs.Count; i++) if (!result.ContainsKey(i)) result[i] = Array.Empty<double>();
+                    var returnedCount = result.Count(kv => kv.Value != null && kv.Value.Length > 0);
+                    if (returnedCount < inputs.Count)
+                        _logger.LogWarning("Embedding service returned {Returned} embeddings for {Requested} inputs (endpoint={Endpoint}; provider=ollama)", returnedCount, inputs.Count, endpoint);
+                    return result;
+                }
+
+                // Non-Ollama: send a single batch request using an array of strings (OpenAI-style)
+                var payload = new { model = model, input = inputs };
+
+                using var respBatch = await client.PostAsJsonAsync(requestUri, payload, cancellationToken);
+                if (!respBatch.IsSuccessStatusCode)
+                {
+                    var body = await respBatch.Content.ReadAsStringAsync(cancellationToken);
+                    _logger.LogWarning("Embedding request failed: {Status} {Body}", respBatch.StatusCode, body);
                     return Enumerable.Range(0, inputs.Count).ToDictionary(i => i, _ => Array.Empty<double>());
                 }
 
-                using var stream = await resp.Content.ReadAsStreamAsync(cancellationToken);
-                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-                var root = doc.RootElement;
+                using var streamBatch = await respBatch.Content.ReadAsStreamAsync(cancellationToken);
+                using var docB = await JsonDocument.ParseAsync(streamBatch, cancellationToken: cancellationToken);
+                var root = docB.RootElement;
                 // Diagnose response shape to help triage missing/short responses
                 string responseShape;
                 if (root.ValueKind == JsonValueKind.Object)
@@ -227,7 +280,6 @@ namespace WebhookApi.Services
                 {
                     responseShape = $"other:{root.ValueKind}";
                 }
-                var result = new Dictionary<int, double[]>();
 
                 static int? ReadId(JsonElement item)
                 {
