@@ -90,7 +90,7 @@ namespace WebhookApi.Services
                 await _db.SaveChangesAsync(cancellationToken);
 
             // Chunk the text
-            var chunks = ChunkText(text, maxWords: 450).Select((chunkText, idx) => new { Index = idx, Text = chunkText }).ToList();
+            var chunks = ChunkText(text, maxWords: 150).Select((chunkText, idx) => new { Index = idx, Text = chunkText }).ToList();
 
             // Get embeddings from configured AI provider (id-mapped)
             var vectors = await GetEmbeddingsAsync(chunks.Select(c => c.Text).ToList(), cancellationToken);
