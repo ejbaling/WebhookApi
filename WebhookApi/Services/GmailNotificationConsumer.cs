@@ -411,13 +411,13 @@ public partial class GmailNotificationConsumer : BackgroundService
                                         _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
                                     }
 
-                                    if (aiConfig?.Value == true)
-                                    {
-                                        await botClient.SendTextMessageAsync(
-                                            new Telegram.Bot.Types.ChatId("@redwoodiloiloskycast"),
-                                            text: qaResponse?.Answer ?? "Sorry, no response from AI.",
-                                            cancellationToken: CancellationToken.None);
-                                    }
+                                    // if (aiConfig?.Value == true)
+                                    // {
+                                    //     await botClient.SendTextMessageAsync(
+                                    //         new Telegram.Bot.Types.ChatId("@redwoodiloiloskycast"),
+                                    //         text: qaResponse?.Answer ?? "Sorry, no response from AI.",
+                                    //         cancellationToken: CancellationToken.None);
+                                    // }
 
 
                                     var isPayout = subject.Contains("payout", StringComparison.OrdinalIgnoreCase) ||
