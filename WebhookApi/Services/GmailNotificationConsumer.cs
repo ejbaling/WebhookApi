@@ -332,19 +332,14 @@ public partial class GmailNotificationConsumer : BackgroundService
 
                                             if (ragChunks.Count > 0)
                                             {
-                                                // Format chunks the same way the QA endpoint already expects rules
-                                                var rulesObject = new
-                                                {
-                                                    rules = new[]
-                                                    {
-                                                        new { category = "House Rules", rules = ragChunks }
-                                                    }
-                                                };
-                                                rulesJson = JsonSerializer.Serialize(rulesObject);
+                                                // Pass chunks as plain text so the LLM sees readable context
+                                                // rather than a raw JSON blob (which causes small models to
+                                                // concatenate every rule they find in the JSON).
+                                                rulesJson = string.Join("\n\n", ragChunks);
                                             }
                                             else
                                             {
-                                                // RAG unavailable — fall back to keyword-based DB rules
+                                                // RAG unavailable — fall back to keyword-based DB rules as plain text
                                                 var ruleRepository = scope.ServiceProvider.GetRequiredService<IRuleRepository>();
                                                 var relevantRules = await ruleRepository.GetRelevantRulesAsync(guestQuestion);
 
@@ -358,7 +353,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                                     .ToList();
 
                                                 rulesJson = rulesData.Count != 0
-                                                    ? JsonSerializer.Serialize(new { rules = rulesData })
+                                                    ? string.Join("\n\n", rulesData.SelectMany(g => g.rules))
                                                     : HouseRules.RulesJson;
                                             }
                                         }
