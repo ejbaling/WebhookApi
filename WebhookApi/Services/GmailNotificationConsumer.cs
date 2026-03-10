@@ -318,7 +318,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                     {
                                         string guestQuestion = string.Empty;
                                         if (string.IsNullOrWhiteSpace(bookedGuestEmailBody))
-                                           guestQuestion = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
+                                           guestQuestion = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, true) : string.Empty;
 
                                         // Semantic RAG search — find the most relevant document chunks
                                         // for this guest message. Fall back to keyword-based DB rules
