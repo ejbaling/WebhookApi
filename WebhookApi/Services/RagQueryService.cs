@@ -29,7 +29,7 @@ public class RagQueryService : IRagQueryService
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<string>> SearchAsync(string query, int topK = 5, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<string>> SearchAsync(string query, int topK = 3, double maxDistance = 0.40, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(query)) return [];
 
@@ -45,15 +45,25 @@ public class RagQueryService : IRagQueryService
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var chunks = await dbContext.RagChunks
+        // Fetch candidates then apply the distance threshold in-process (pgvector orders but
+        // doesn't expose the computed distance as a filterable scalar in EF Core without a raw SQL query).
+        var candidates = await dbContext.RagChunks
             .Where(c => c.Embedding != null)
             .OrderBy(c => c.Embedding!.CosineDistance(queryVector))
-            .Take(topK)
-            .Select(c => c.Text)
+            .Take(topK * 2)          // fetch a wider pool so the threshold has candidates to filter
+            .Select(c => new { c.Text, Distance = c.Embedding!.CosineDistance(queryVector) })
             .ToListAsync(cancellationToken);
 
+        var chunks = candidates
+            .Where(c => c.Distance <= maxDistance)
+            .Take(topK)
+            .Select(c => c.Text)
+            .ToList();
+
         var preview = query.Length > 100 ? query.Substring(0, 100) + "..." : query;
-        _logger.LogInformation("RAG query returned {Count} chunks for query: {Query}", chunks.Count, preview);
+        _logger.LogInformation(
+            "RAG query: {Total} candidates, {Kept} kept after distance threshold {Threshold} for query: {Query}",
+            candidates.Count, chunks.Count, maxDistance, preview);
 
         return chunks;
     }

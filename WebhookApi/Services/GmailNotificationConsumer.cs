@@ -316,9 +316,10 @@ public partial class GmailNotificationConsumer : BackgroundService
 
                                     if (aiConfig?.Value == true)
                                     {
-                                        string guestQuestion = string.Empty;
-                                        if (string.IsNullOrWhiteSpace(bookedGuestEmailBody))
-                                           guestQuestion = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, true) : string.Empty;
+                                        // Use the booked-guest section as the question; fall back to full body extraction
+                                        string guestQuestion = !string.IsNullOrWhiteSpace(bookedGuestEmailBody)
+                                            ? bookedGuestEmailBody
+                                            : (message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, true) : string.Empty);
 
                                         // Semantic RAG search — find the most relevant document chunks
                                         // for this guest message. Fall back to keyword-based DB rules
@@ -327,7 +328,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                         using (var scope = _scopeFactory.CreateScope())
                                         {
                                             var ragQuery = scope.ServiceProvider.GetRequiredService<IRagQueryService>();
-                                            var ragChunks = await ragQuery.SearchAsync(guestQuestion, topK: 5);
+                                            var ragChunks = await ragQuery.SearchAsync(guestQuestion, topK: 3, maxDistance: 0.40);
 
                                             if (ragChunks.Count > 0)
                                             {
