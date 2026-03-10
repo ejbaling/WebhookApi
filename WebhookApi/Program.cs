@@ -84,6 +84,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<IRuleRepository, RuleRepository>();
 // RAG ingestion service
 builder.Services.AddScoped<WebhookApi.Services.IRagIngestService, WebhookApi.Services.RagIngestService>();
+builder.Services.AddScoped<WebhookApi.Services.IRagQueryService, WebhookApi.Services.RagQueryService>();
 
 // Add HttpClient support
 builder.Services.AddHttpClient();

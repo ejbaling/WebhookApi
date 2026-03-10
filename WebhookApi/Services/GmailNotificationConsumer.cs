@@ -305,30 +305,48 @@ public partial class GmailNotificationConsumer : BackgroundService
                                     bool? isInRange = IsCurrentDateInReservationRange(subject);
                                     QaResponse? qaResponse = null;
 
-                                    if (isInRange.HasValue)
+                                    _logger.LogInformation("Current date is {Status} the reservation range.", isInRange.HasValue && isInRange.Value ? "within" : "outside");
+
+                                    Config? aiConfig = null;
+                                    using (var scope = _scopeFactory.CreateScope()) 
                                     {
-                                        _logger.LogInformation("Current date is {Status} the reservation range.", isInRange.Value ? "within" : "outside");
-                                        if (isInRange.Value && !string.IsNullOrWhiteSpace(bookedGuestEmailBody))
+                                        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                                        aiConfig = await dbContext.Configs.FirstOrDefaultAsync(c => c.Key == "AiEnabled");
+                                    }
+
+                                    if (aiConfig?.Value == true)
+                                    {
+                                        string guestQuestion = string.Empty;
+                                        if (string.IsNullOrWhiteSpace(bookedGuestEmailBody))
+                                           guestQuestion = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
+
+                                        // Semantic RAG search — find the most relevant document chunks
+                                        // for this guest message. Fall back to keyword-based DB rules
+                                        // (or the hardcoded JSON) if the embedding service is unavailable.
+                                        string rulesJson;
+                                        using (var scope = _scopeFactory.CreateScope())
                                         {
+                                            var ragQuery = scope.ServiceProvider.GetRequiredService<IRagQueryService>();
+                                            var ragChunks = await ragQuery.SearchAsync(guestQuestion, topK: 5);
 
-                                            Config? aiConfig = null;
-                                            using (var scope = _scopeFactory.CreateScope()) 
+                                            if (ragChunks.Count > 0)
                                             {
-                                                var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                                                aiConfig = await dbContext.Configs.FirstOrDefaultAsync(c => c.Key == "AiEnabled");
-                                            }
-
-                                            if (aiConfig?.Value == true)
-                                            {
-                                                // Fetch relevant rules from DB first
-                                                List<Rule> relevantRules;
-                                                using (var scope = _scopeFactory.CreateScope())
+                                                // Format chunks the same way the QA endpoint already expects rules
+                                                var rulesObject = new
                                                 {
-                                                    var ruleRepository = scope.ServiceProvider.GetRequiredService<IRuleRepository>();
-                                                    relevantRules = await ruleRepository.GetRelevantRulesAsync(bookedGuestEmailBody);
-                                                }
+                                                    rules = new[]
+                                                    {
+                                                        new { category = "House Rules", rules = ragChunks }
+                                                    }
+                                                };
+                                                rulesJson = JsonSerializer.Serialize(rulesObject);
+                                            }
+                                            else
+                                            {
+                                                // RAG unavailable — fall back to keyword-based DB rules
+                                                var ruleRepository = scope.ServiceProvider.GetRequiredService<IRuleRepository>();
+                                                var relevantRules = await ruleRepository.GetRelevantRulesAsync(guestQuestion);
 
-                                                // Group by category
                                                 var rulesData = relevantRules
                                                     .GroupBy(r => r.RuleCategory.Name)
                                                     .Select(g => new
@@ -338,60 +356,57 @@ public partial class GmailNotificationConsumer : BackgroundService
                                                     })
                                                     .ToList();
 
-                                                // Check if rules are empty and use fallback if needed
-                                                string rulesJson;
-                                                if (rulesData.Count != 0)
-                                                {
-                                                    var rulesObject = new { rules = rulesData };
-                                                    rulesJson = JsonSerializer.Serialize(rulesObject);
-
-                                                }
-                                                else
-                                                    rulesJson = HouseRules.RulesJson; // Fallback
-
-                                                var request = new
-                                                {
-                                                    question = bookedGuestEmailBody,
-                                                    rules = rulesJson
-                                                };
-
-                                                var result = await _httpClient.PostAsJsonAsync("http://100.80.77.91:8000/qa", request);
-                                                string response = string.Empty;
-                                                if (result != null && result.IsSuccessStatusCode == true && result.Content != null)
-                                                    response = await result.Content.ReadAsStringAsync();
-
-                                                if (!string.IsNullOrWhiteSpace(response))
-                                                    qaResponse = JsonSerializer.Deserialize<QaResponse>(response, JsonOptions.Default);
+                                                rulesJson = rulesData.Count != 0
+                                                    ? JsonSerializer.Serialize(new { rules = rulesData })
+                                                    : HouseRules.RulesJson;
                                             }
-
-                                            // Forward to Telegram
-                                            var botToken = _configuration["Telegram:BotToken"];
-                                            var chatId = _configuration["Telegram:ChatId"]; // Your personal Telegram user ID
-                                            if (string.IsNullOrWhiteSpace(botToken) || string.IsNullOrWhiteSpace(chatId))
-                                            {
-                                                _logger.LogError("Telegram BotToken or chatIc is not configured.");
-                                                return;
-                                            }
-                                            
-                                            var telegramMessage = $"{ExtractSubject(subject)}: {bookedGuestEmailBody}";
-                                            // Replace with your actual chatId and botClient instance
-                                            var botClient = new TelegramBotClient(botToken);
-                                            await botClient.SendTextMessageAsync(
-                                                new Telegram.Bot.Types.ChatId(chatId),
-                                                text: telegramMessage,
-                                                cancellationToken: CancellationToken.None);
-
-                                            if (aiConfig?.Value == true)
-                                            {
-                                                await botClient.SendTextMessageAsync(
-                                                    new Telegram.Bot.Types.ChatId("@redwoodiloiloskycast"),
-                                                    text: qaResponse?.Answer ?? "Sorry, no response from AI.",
-                                                    cancellationToken: CancellationToken.None);
-                                            }
-
-                                            _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
                                         }
+
+                                        var request = new
+                                        {
+                                            question = guestQuestion,
+                                            rules = rulesJson
+                                        };
+
+                                        var result = await _httpClient.PostAsJsonAsync("http://100.80.77.91:8000/qa", request);
+                                        string response = string.Empty;
+                                        if (result != null && result.IsSuccessStatusCode == true && result.Content != null)
+                                            response = await result.Content.ReadAsStringAsync();
+
+                                        if (!string.IsNullOrWhiteSpace(response))
+                                            qaResponse = JsonSerializer.Deserialize<QaResponse>(response, JsonOptions.Default);
                                     }
+
+                                    // Forward to Telegram
+                                    var botToken = _configuration["Telegram:BotToken"];
+                                    var chatId = _configuration["Telegram:ChatId"]; // Your personal Telegram user ID
+                                    if (string.IsNullOrWhiteSpace(botToken) || string.IsNullOrWhiteSpace(chatId))
+                                    {
+                                        _logger.LogError("Telegram BotToken or chatIc is not configured.");
+                                        return;
+                                    }
+                                    
+                                    var botClient = new TelegramBotClient(botToken);
+
+                                    if (isInRange.HasValue && isInRange.Value)
+                                    {
+                                        var telegramMessage = $"{ExtractSubject(subject)}: {bookedGuestEmailBody}";
+                                        // Replace with your actual chatId and botClient instance
+                                        await botClient.SendTextMessageAsync(
+                                            new Telegram.Bot.Types.ChatId(chatId),
+                                            text: telegramMessage,
+                                            cancellationToken: CancellationToken.None);
+                                        _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
+                                    }
+
+                                    if (aiConfig?.Value == true)
+                                    {
+                                        await botClient.SendTextMessageAsync(
+                                            new Telegram.Bot.Types.ChatId("@redwoodiloiloskycast"),
+                                            text: qaResponse?.Answer ?? "Sorry, no response from AI.",
+                                            cancellationToken: CancellationToken.None);
+                                    }
+
 
                                     var isPayout = subject.Contains("payout", StringComparison.OrdinalIgnoreCase) ||
                                                         subject.Contains("payment", StringComparison.OrdinalIgnoreCase);
@@ -420,9 +435,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                         }
                                     }
                                     else
-                                    {
                                         await HandleAirbnbExtractionAndSaveAsync(subject, airBnbEmailBody, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId, isPayout);
-                                    }
                                 }
                                 catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
                                 {
