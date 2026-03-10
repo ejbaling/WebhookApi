@@ -368,13 +368,25 @@ public partial class GmailNotificationConsumer : BackgroundService
                                             rules = rulesJson
                                         };
 
-                                        var result = await _httpClient.PostAsJsonAsync("http://100.80.77.91:8000/qa", request);
-                                        string response = string.Empty;
-                                        if (result != null && result.IsSuccessStatusCode == true && result.Content != null)
-                                            response = await result.Content.ReadAsStringAsync();
-
-                                        if (!string.IsNullOrWhiteSpace(response))
-                                            qaResponse = JsonSerializer.Deserialize<QaResponse>(response, JsonOptions.Default);
+                                        try
+                                        {
+                                            var result = await _httpClient.PostAsJsonAsync("http://100.80.77.91:8000/qa", request);
+                                            if (result?.IsSuccessStatusCode == true && result.Content != null)
+                                            {
+                                                var response = await result.Content.ReadAsStringAsync();
+                                                if (!string.IsNullOrWhiteSpace(response))
+                                                    qaResponse = JsonSerializer.Deserialize<QaResponse>(response, JsonOptions.Default);
+                                            }
+                                            else
+                                            {
+                                                _logger.LogWarning("QA endpoint returned non-success status: {Status}", result?.StatusCode);
+                                            }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            _logger.LogWarning(ex, "Failed to call QA endpoint; continuing without AI response.");
+                                            qaResponse = null;
+                                        }
                                     }
 
                                     // Forward to Telegram
