@@ -1,82 +1,105 @@
 # Property Details
 
-The property is located inside a secured and quiet subdivision.
+The property is located inside a **secured and quiet subdivision**.
 
-If you are commuting, the distance is 350 meters (about a 5 minute walk) from the place to the main road.
+If you are commuting, the distance from the house to the main road is **350 meters (about a 5-minute walk)**.
 
-There are no tricycles inside the subdivision. However, both Grab and traditional taxis are readily available in the area.
+There are **no tricycles operating inside the subdivision**, however **Grab and traditional taxis are readily available** in the area for your convenience.
 
 ## Child Policy
 
-Strictly no children under 13 years old.
+Strictly **no children under 13 years old**.
 
-The unit is located on the 2nd floor and the windows do not have security bars. Because of this design, the accommodation is not suitable for young children.
+The unit is located on the **2nd floor** and the windows **do not have security bars**. Because of this design, the accommodation is **not suitable for young children**.
 
-We are unable to accept bookings with children, and exceptions cannot be made.
+We are unable to accept bookings with children, and **exceptions cannot be made**.
 
-## Occupancy Policy
+## Occupancy Policy (Strictly Enforced)
 
-Maximum of 2 registered guests only.
+Maximum of **2 registered guests only**.
 
-Up to 2 approved visitors at a time are allowed between:
-8:00 AM – 9:00 PM.
+Up to **2 approved visitors at a time** are allowed between:
 
-Total persons in the room must not exceed 4 at any time.
+**8:00 AM – 9:00 PM**
 
-No overnight visitors.
+Total persons in the room must **not exceed 4 at any time**.
 
-Violations may result in cancellation without refund for safety and insurance compliance.
+**No overnight visitors.**
+
+Violations may result in **cancellation without refund** for safety and insurance compliance.
 
 ## Meals
 
-Meals are not provided.
+Meals are **not provided**.
 
-However, the kitchen is stocked with basic utensils so guests can prepare snacks or light meals.
+However, the kitchen is stocked with **basic utensils** so guests can prepare **snacks or light meals** during their stay.
 
 ## Laundry Hours
 
-To ensure a peaceful and comfortable stay for everyone, the washing machine and clothes dryer operate only during:
+To ensure a peaceful and comfortable stay for everyone, the **washing machine and clothes dryer operate only during**:
 
-7:00 AM – 7:00 PM daily.
+**7:00 AM – 7:00 PM daily.**
 
 ## Nearby Locations
 
-Iloilo International Airport  
+**Iloilo International Airport**  
 24 minutes by car  
 16.6 km away
 
-Vista Mall  
+**Vista Mall**  
 7 minutes by car  
 2.7 km away
 
-Iloilo Supermart  
+**Iloilo Supermart**  
 9 minutes by car  
 2.6 km away
 
-Festive Walk Mall (Megaworld Boulevard)  
+**Festive Walk Mall (Megaworld Boulevard)**  
 11 minutes by car  
-3.4 km away
+3.4 km away  
+One ride (public transportation) from the subdivision gate
 
-SM City Iloilo  
+**SM City Iloilo**  
 14 minutes by car  
-4.5 km away
+4.5 km away  
+Two rides (public transportation) from the subdivision gate
 
-Iloilo City Proper  
+**Iloilo City Proper**  
 21 minutes by car  
 7.7 km away
 
-Seven Eleven  
+**7-Eleven**  
 10 minutes walk  
 700 meters away
 
 ## Rainy Season Notice
 
-During the rainy season (July–October), heavy rain may cause temporary street flooding of up to 20 cm.
+During the **rainy season (July–October)**, heavy rain may cause **temporary street flooding of up to 20 cm** during periods of continuous rain and limited drainage.
 
-Floodwater usually clears overnight or within a day. In severe weather events, it may take 2–3 days to drain completely.
+Floodwater usually clears **overnight or within a day**. During severe weather events, it may take **2–3 days** to fully drain.
 
-Vehicle access may be temporarily limited during these periods.
+Vehicle access may be **temporarily limited** during these periods.
 
-The house remains safe, dry, and comfortable during these situations.
+We also have a **private vehicle available** to assist guests with transportation when necessary.
 
-We can assist guests with transportation to and from the subdivision gate if needed.
+The good news is that **the house remains completely safe, dry, and comfortable** during these situations.
+
+We are happy to assist guests with **transport to and from the subdivision gate** for Grab, taxis, jeepneys, or Foodpanda deliveries if needed.
+
+## Security Cameras
+
+For security and safety purposes, the property has **outdoor surveillance cameras** in the following areas:
+
+**Garage Camera**  
+Monitors the garage and front gate. When rotated, it can also monitor the adjacent vacant lot and nearby road.
+
+**Side Camera (East)**  
+Monitors the east side of the house.
+
+**Side Camera (West)**  
+Monitors the lanai area of the house.
+
+**Fire Exit Stair Camera**  
+Monitors the back of the house.
+
+None of these cameras are directed toward **any indoor spaces or private guest areas**.
