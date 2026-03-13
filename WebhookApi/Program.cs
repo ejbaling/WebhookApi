@@ -42,12 +42,6 @@ builder.Services.AddSingleton<IConnectionFactory>(sp =>
 builder.Services.AddHostedService<GmailNotificationConsumer>();
 builder.Services.AddHostedService<WebhookApi.Services.TelegramReceiverService>();
 builder.Services.AddHttpClient();
-
-// Add Redis distributed cache (shared cache across instances)
-builder.Services.AddStackExchangeRedisCache(options =>
-{
-    options.Configuration = builder.Configuration["Redis:ConnectionString"] ?? "localhost:6379";
-});
 // Token service for programmatic token refresh / client_credentials
 builder.Services.AddSingleton<WebhookApi.Services.ITokenService, WebhookApi.Services.TokenService>();
 // Renew Gmail watch subscription in background

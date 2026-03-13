@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   webhookapi:
     #build:
@@ -17,7 +19,6 @@ services:
       - RabbitMQ__HostName=rabbitmq
       - AWS_PROFILE=config-manager
       - AWS_SHARED_CREDENTIALS_FILE=/root/.aws/credentials
-      - Redis__ConnectionString=redis:6379,abortConnect=false
     restart: unless-stopped
     volumes:
       - ./Logs:/App/Logs:rw
@@ -26,7 +27,6 @@ services:
       - webhook-network
     depends_on:
       - rabbitmq
-      - redis
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -47,21 +47,9 @@ services:
       timeout: 10s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: webhookapi_redis
-    ports:
-      - "6379:6379"
-    restart: unless-stopped
-    volumes:
-      - redis_data:/data
-    networks:
-      - webhook-network
-
 networks:
   webhook-network:
     driver: bridge
 
 volumes:
   rabbitmq_data:
-  redis_data:

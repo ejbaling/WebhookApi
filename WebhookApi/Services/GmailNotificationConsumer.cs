@@ -4,7 +4,6 @@ using Google.Apis.Gmail.v1.Data;
 using Google.Apis.Services;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
-using Microsoft.Extensions.Caching.Distributed;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -62,7 +61,6 @@ public partial class GmailNotificationConsumer : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly HttpClient _httpClient;
-    private readonly Microsoft.Extensions.Caching.Distributed.IDistributedCache _cache;
 
     // In-memory storage for last processed historyId (development only)
     private static ulong _lastProcessedHistoryId = 0;
@@ -76,15 +74,13 @@ public partial class GmailNotificationConsumer : BackgroundService
         ILogger<GmailNotificationConsumer> logger,
         IConfiguration configuration,
         IServiceScopeFactory scopeFactory,
-        IHttpClientFactory httpClientFactory,
-        Microsoft.Extensions.Caching.Distributed.IDistributedCache cache)
+        IHttpClientFactory httpClientFactory)
     {
         _connectionFactory = connectionFactory;
         _logger = logger;
         _configuration = configuration;
         _scopeFactory = scopeFactory;
         _httpClient = httpClientFactory.CreateClient();
-        _cache = cache;
     }
 
     private async Task<bool> TryConnect()
@@ -312,35 +308,10 @@ public partial class GmailNotificationConsumer : BackgroundService
                                     _logger.LogInformation("Current date is {Status} the reservation range.", isInRange.HasValue && isInRange.Value ? "within" : "outside");
 
                                     Config? aiConfig = null;
-
-                                    // Try cache-aside: read from distributed cache first
-                                    var cached = await _cache.GetStringAsync("config:AiEnabled");
-                                    if (!string.IsNullOrEmpty(cached))
+                                    using (var scope = _scopeFactory.CreateScope()) 
                                     {
-                                        if (bool.TryParse(cached, out var cachedVal))
-                                        {
-                                            aiConfig = new Config { Key = "AiEnabled", Value = cachedVal };
-                                            _logger.LogInformation("AiEnabled cache hit: {Value}", cachedVal);
-                                        }
-                                    }
-                                    else
-                                    {
-                                        _logger.LogInformation("AiEnabled cache miss; querying database");
-                                        using (var scope = _scopeFactory.CreateScope())
-                                        {
-                                            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                                            aiConfig = await dbContext.Configs.FirstOrDefaultAsync(c => c.Key == "AiEnabled");
-                                        }
-
-                                        if (aiConfig != null)
-                                        {
-                                            // Cache for a short duration; change TTL as appropriate
-                                            var opts = new DistributedCacheEntryOptions
-                                            {
-                                                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
-                                            };
-                                            await _cache.SetStringAsync("config:AiEnabled", aiConfig.Value ? "true" : "false", opts);
-                                        }
+                                        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                                        aiConfig = await dbContext.Configs.FirstOrDefaultAsync(c => c.Key == "AiEnabled");
                                     }
 
                                     if (aiConfig?.Value == true)
