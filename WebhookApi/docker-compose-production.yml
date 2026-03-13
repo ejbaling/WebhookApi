@@ -19,7 +19,7 @@ services:
       - RabbitMQ__HostName=rabbitmq
       - AWS_PROFILE=config-manager
       - AWS_SHARED_CREDENTIALS_FILE=/root/.aws/credentials
-      - Redis__ConnectionString=localhost:6380,abortConnect=false
+      - Redis__ConnectionString=redis:6379,abortConnect=false
     restart: unless-stopped
     volumes:
       - ./Logs:/App/Logs:rw
@@ -27,8 +27,10 @@ services:
     networks:
       - webhook-network
     depends_on:
-      - rabbitmq
-      - redis
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -52,13 +54,16 @@ services:
   redis:
     image: redis:7-alpine
     container_name: webhookapi_redis
-    ports:
-      - "6380:6379"
     restart: unless-stopped
     volumes:
       - redis_data:/data
     networks:
       - webhook-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 networks:
   webhook-network:
