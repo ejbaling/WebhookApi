@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   webhookapi:
     #build:
@@ -17,7 +19,7 @@ services:
       - RabbitMQ__HostName=rabbitmq
       - AWS_PROFILE=config-manager
       - AWS_SHARED_CREDENTIALS_FILE=/root/.aws/credentials
-      - Redis__ConnectionString=redis:6379,abortConnect=false
+      - Redis__ConnectionString=redis:6380,abortConnect=false
     restart: unless-stopped
     volumes:
       - ./Logs:/App/Logs:rw
@@ -51,7 +53,7 @@ services:
     image: redis:7-alpine
     container_name: webhookapi_redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     restart: unless-stopped
     volumes:
       - redis_data:/data
