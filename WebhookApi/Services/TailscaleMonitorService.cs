@@ -133,7 +133,7 @@ namespace WebhookApi.Services
 
                         if (!isOnline && previousOnline)
                         {
-                            _logger.LogWarning("Tailscale device went offline: {Name} ({Id})", name, id);
+                            _logger.LogWarning("⚠️ Tailscale device went offline: {Name} ({Id})", name, id);
                             // send Telegram alert if configured
                             if (_telegramClient is not null && !string.IsNullOrEmpty(_telegramChatId))
                             {
@@ -142,7 +142,7 @@ namespace WebhookApi.Services
                         }
                         else if (isOnline && !previousOnline && _deviceOnlineState.ContainsKey(id))
                         {
-                            _logger.LogInformation("Tailscale device back online: {Name} ({Id})", name, id);
+                            _logger.LogInformation("✅ Tailscale device back online: {Name} ({Id})", name, id);
                             // send Telegram alert for device back online if configured
                             if (_telegramClient is not null && !string.IsNullOrEmpty(_telegramChatId))
                             {
@@ -189,7 +189,7 @@ namespace WebhookApi.Services
                 if (_telegramClient is null || string.IsNullOrEmpty(_telegramChatId))
                     return;
 
-                var text = $"Tailscale device offline: {name} ({id}) at {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC";
+                var text = $"⚠️ Tailscale device offline: {name} ({id}) at {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC";
                 await _telegramClient.SendTextMessageAsync(new ChatId(_telegramChatId), text, cancellationToken: ct);
                 _logger.LogInformation("Sent Telegram alert for offline device {Name} ({Id})", name, id);
             }
@@ -210,7 +210,7 @@ namespace WebhookApi.Services
                 if (_telegramClient is null || string.IsNullOrEmpty(_telegramChatId))
                     return;
 
-                var text = $"Tailscale device back online: {name} ({id}) at {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC";
+                var text = $"✅ Tailscale device back online: {name} ({id}) at {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC";
                 await _telegramClient.SendTextMessageAsync(new ChatId(_telegramChatId), text, cancellationToken: ct);
                 _logger.LogInformation("Sent Telegram alert for online device {Name} ({Id})", name, id);
             }
