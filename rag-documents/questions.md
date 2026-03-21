@@ -108,6 +108,18 @@
 - **Iloilo City Proper:** 21 min by car, 7.7 km
 - **7-Eleven:** 10 min walk, 700 meters
 
+## Where is the exact location?
+
+Thanks for your interest in the place. For privacy and security reasons, we only share the exact address after a booking has been confirmed.
+
+Let me know if you’d like more details about the area!
+
+Our place is 24 minutes by Grab, 16.6 km from Iloilo International Airport.
+Vista Mall is 7 minutes by Grab, 2.7 km.
+Festive Walk Mall, Megaworld Blvd is 11 minutes by Grab, 3.4 km.
+SM City Iloilo is 14 minutes by Grab, 4.5 km.
+Iloilo City Proper is 21 minutes by Grab, 7.7 km.
+
 ## 16. What happens if I damage property or appliances?
 
 - Guests are responsible for any damage.
