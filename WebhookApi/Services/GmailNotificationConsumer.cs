@@ -680,7 +680,7 @@ public partial class GmailNotificationConsumer : BackgroundService
         return payload.Parts[0].Body?.Data != null ? DecodeBase64(payload.Parts[0].Body.Data) : string.Empty;
     }
 
-    [GeneratedRegex(@"@airbnb\.com\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"@(?:[\w-]+\.)*airbnb\.com\b", RegexOptions.IgnoreCase)]
     private static partial Regex AirbnbRegex();
 
     // Helper method to decode Base64 safely
