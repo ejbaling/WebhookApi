@@ -315,7 +315,7 @@ try
     .WithName("ProcessSmsWebhook");
 
     // Endpoint to receive Airbnb notifications from Android listener
-    app.MapPost("/api/airbnb/notifications", async (HttpContext context, IConnectionFactory connectionFactory, ILogger<Program> logger) =>
+    app.MapPost("api/airbnb/notifications", async (HttpContext context, IConnectionFactory connectionFactory, ILogger<Program> logger) =>
     {
         using var reader = new StreamReader(context.Request.Body);
         var requestBody = await reader.ReadToEndAsync();
