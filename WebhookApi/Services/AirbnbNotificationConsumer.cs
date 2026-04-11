@@ -154,6 +154,25 @@ public class AirbnbNotificationConsumer : BackgroundService
                                 _logger.LogInformation("Title parsed for date range: {Title} => InRange={InRange}", incomingTitle, isInRange);
                             }
 
+                            // If AI marked message as urgent and the reservation is in-range, trigger emergency AMI
+                            if (isInRange.HasValue && isInRange.Value && ids?.Urgent == true)
+                            {
+                                try
+                                {
+                                    using var amiScope = _scopeFactory.CreateScope();
+                                    var amiService = amiScope.ServiceProvider.GetService<IEmergencyAmiService>();
+                                    if (amiService != null)
+                                    {
+                                        await amiService.TriggerEmergencyAsync(CancellationToken.None);
+                                        _logger.LogWarning("Triggered emergency AMI originate for urgent Airbnb message.");
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogError(ex, "Failed to trigger emergency AMI call for Airbnb message");
+                                }
+                            }
+
                             var guestMessage = new GuestMessage
                             {
                                 Message = incomingMessage ?? strBody,
