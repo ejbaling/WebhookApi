@@ -314,6 +314,42 @@ try
     })
     .WithName("ProcessSmsWebhook");
 
+    // Endpoint to receive Airbnb notifications from Android listener
+    app.MapPost("/api/airbnb/notifications", async (HttpContext context, IConnectionFactory connectionFactory, ILogger<Program> logger) =>
+    {
+        using var reader = new StreamReader(context.Request.Body);
+        var requestBody = await reader.ReadToEndAsync();
+
+        logger.LogInformation("Received Airbnb webhook: {Payload}", requestBody);
+
+        // Push message to RabbitMQ for downstream processing
+        try
+        {
+            using var connection = await connectionFactory.CreateConnectionAsync();
+            using var channel = await connection.CreateChannelAsync();
+
+            await channel.QueueDeclareAsync(queue: "airbnb-notifications",
+                                durable: true,
+                                exclusive: false,
+                                autoDelete: false,
+                                arguments: null);
+
+            var body = Encoding.UTF8.GetBytes(requestBody);
+
+            await channel.BasicPublishAsync(exchange: "",
+                                routingKey: "airbnb-notifications",
+                                body: body);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to enqueue Airbnb notification");
+            return Results.Problem("failed to enqueue", statusCode: 500);
+        }
+
+        return Results.Ok("Webhook received");
+    })
+    .WithName("ProcessAirbnbWebhook");
+
     // RAG document upload endpoint
     app.MapPost("/api/rag/upload", async (HttpRequest request, WebhookApi.Services.IRagIngestService ingest, ILogger<Program> logger, CancellationToken ct) =>
     {
