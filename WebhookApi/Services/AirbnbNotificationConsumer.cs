@@ -5,6 +5,8 @@ using RabbitMQ.Client.Events;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using WebhookApi.Data;
 using RedwoodIloilo.Common.Entities;
@@ -101,6 +103,27 @@ public class AirbnbNotificationConsumer : BackgroundService
                     var body = ea.Body.ToArray();
                     var strBody = Encoding.UTF8.GetString(body);
 
+                        // Try to parse a JSON envelope and extract a `title` field for date parsing
+                        string? incomingTitle = null;
+                        string? incomingMessage = null;
+                        try
+                        {
+                            using var doc = JsonDocument.Parse(strBody);
+                            var root = doc.RootElement;
+                            if (root.ValueKind == JsonValueKind.Object)
+                            {
+                                if (root.TryGetProperty("title", out var t)) incomingTitle = t.GetString();
+                                if (root.TryGetProperty("message", out var m)) incomingMessage = m.GetString();
+                                // Some producers may nest message inside a payload object
+                                if (incomingMessage == null && root.TryGetProperty("payload", out var p) && p.ValueKind == JsonValueKind.Object && p.TryGetProperty("message", out var pm))
+                                    incomingMessage = pm.GetString();
+                            }
+                        }
+                        catch
+                        {
+                            // not JSON or missing fields — fall back to raw body
+                        }
+
                         try
                         {
                             _logger.LogInformation("Processing Airbnb message: {Message}", strBody);
@@ -123,11 +146,19 @@ public class AirbnbNotificationConsumer : BackgroundService
 
                             var suggestion = ids?.Name ?? ids?.BookingId ?? ids?.AirbnbId ?? ids?.Email ?? ids?.Phone ?? ids?.Amount;
 
+                            // Use title field (if present) to determine whether this notification is within a reservation date range
+                            bool? isInRange = null;
+                            if (!string.IsNullOrWhiteSpace(incomingTitle))
+                            {
+                                isInRange = IsCurrentDateInReservationRange(incomingTitle);
+                                _logger.LogInformation("Title parsed for date range: {Title} => InRange={InRange}", incomingTitle, isInRange);
+                            }
+
                             var guestMessage = new GuestMessage
                             {
-                                Message = strBody,
+                                Message = incomingMessage ?? strBody,
                                 Language = "en",
-                                Category = "airbnb",
+                                Category = (isInRange.HasValue && isInRange.Value) ? "reservation" : "airbnb",
                                 Sentiment = "neutral",
                                 ReplySuggestion = suggestion,
                                 Name = ids?.Name,
@@ -214,5 +245,56 @@ public class AirbnbNotificationConsumer : BackgroundService
     {
         CleanupConnection();
         base.Dispose();
+    }
+
+    // Helper: Extract date range from title and check if current date is in range
+    private bool? IsCurrentDateInReservationRange(string subject)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(subject, @"(\w{3}) (\d{1,2})\s*[–\-]?\s*(?:(\w{3}) (\d{1,2})(?:, (\d{4}))?|(\d{1,2})(?:, (\d{4}))?)\s*(.*)");
+        if (match.Success)
+        {
+            DateTime startDate;
+            DateTime endDate;
+            var timeZoneId = "Asia/Manila";
+            var philippinesTimeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            var philippinesTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, philippinesTimeZone);
+            int year = philippinesTime.Year;
+
+            string startMonth = match.Groups[1].Value;
+            int startDay = int.Parse(match.Groups[2].Value);
+
+            try
+            {
+                if (match.Groups[3].Success)
+                {
+                    // Two different months
+                    string endMonth = match.Groups[3].Value;
+                    int endDay = int.Parse(match.Groups[4].Value);
+                    startDate = DateTime.ParseExact($"{startMonth} {startDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
+                    endDate = DateTime.ParseExact($"{endMonth} {endDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    // Same month
+                    string month = startMonth;
+                    int endDay = int.Parse(match.Groups[6].Value);
+                    startDate = DateTime.ParseExact($"{month} {startDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
+                    endDate = DateTime.ParseExact($"{month} {endDay}, {year}", "MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
+                }
+
+                // Adjust start and end times
+                startDate = startDate.Date.AddHours(6);
+                endDate = endDate.Date.AddHours(23);
+
+                _logger.LogInformation("Reservation start date: {StartDate}, end date: {EndDate}", startDate, endDate);
+                return philippinesTime >= startDate && philippinesTime <= endDate;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Error parsing date range from title: {Title}", subject);
+                _logger.LogError(ex.Message);
+            }
+        }
+        return null;
     }
 }
