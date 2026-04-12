@@ -316,6 +316,8 @@ try
     .WithName("ProcessSmsWebhook");
 
     // Endpoint to receive Airbnb notifications from Android listener
+    // Use the command below to test with curl (replace URL and payload as needed):
+    // C:\Users\ejbal>curl -k -X POST "https://localhost/airbnb/notifications" -H "Content-Type: application/json" -d "{\"title\":\"Apr 11 - 14 • Redwood Iloilo Kowhai holiday room: Mari Gabrielle\",\"message\":\"We'll be delayed of arrival there, because our service got cancelled. Thank you for understanding\",\"timestamp\":1775901536061}"
     app.MapPost("airbnb/notifications", async (HttpContext context, IConnectionFactory connectionFactory, ILogger<Program> logger) =>
     {
         using var reader = new StreamReader(context.Request.Body);
