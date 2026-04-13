@@ -160,7 +160,7 @@ try
         var requestBody = await reader.ReadToEndAsync();
 
         // Log or process the webhook payload
-        logger.LogInformation("Received payload from Gmail webhook.");
+        logger.LogInformation("Gmail webhook triggered.");
 
         // Push message to RabbitMQ
         using var connection = await connectionFactory.CreateConnectionAsync();
@@ -323,7 +323,7 @@ try
         using var reader = new StreamReader(context.Request.Body);
         var requestBody = await reader.ReadToEndAsync();
 
-        logger.LogInformation("Received Airbnb webhook: {Payload}", requestBody);
+        logger.LogInformation("Airbnb webhook triggered with payload: {Payload}", requestBody);
 
         // Push message to RabbitMQ for downstream processing
         try

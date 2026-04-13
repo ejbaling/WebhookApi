@@ -126,7 +126,7 @@ public class AirbnbNotificationConsumer : BackgroundService
 
                         try
                         {
-                            _logger.LogInformation("Processing Airbnb message: {Message}", strBody);
+                            _logger.LogInformation("Airbnb message: {Message}", strBody);
 
                             using var scope = _scopeFactory.CreateScope();
                             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -164,12 +164,12 @@ public class AirbnbNotificationConsumer : BackgroundService
                                     if (amiService != null)
                                     {
                                         await amiService.TriggerEmergencyAsync(CancellationToken.None);
-                                        _logger.LogWarning("Triggered emergency AMI originate for urgent Airbnb message.");
+                                        _logger.LogWarning("Airbnb urgent message triggered emergency AMI.");
                                     }
                                 }
                                 catch (Exception ex)
                                 {
-                                    _logger.LogError(ex, "Failed to trigger emergency AMI call for Airbnb message");
+                                    _logger.LogError(ex, "Airbnb failed to trigger emergency AMI call for message");
                                 }
                             }
 
@@ -198,6 +198,8 @@ public class AirbnbNotificationConsumer : BackgroundService
                             dbContext.GuestResponses.Add(guestResponse);
 
                             await dbContext.SaveChangesAsync(stoppingToken);
+
+                            _logger.LogInformation("Airbnb message saved to database with ID {Id}", guestMessage.Id);
 
                             if (_channel != null)
                                 await _channel.BasicAckAsync(ea.DeliveryTag, false);

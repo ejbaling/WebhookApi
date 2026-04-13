@@ -266,7 +266,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                     // _logger.LogInformation("Full Gmail message: {MessageJson}", messageJson);
 
                                     string subject = message.Payload?.Headers?.FirstOrDefault(h => h.Name == "Subject")?.Value ?? "(No Subject)";
-                                    _logger.LogInformation("Email subject: {Subject}", subject);
+                                    _logger.LogInformation("Gmail subject: {Subject}", subject);
 
                                     // Determine sender and only process if from airbnb.com
                                     var fromHeader = message.Payload?.Headers?.FirstOrDefault(h => h.Name == "From")?.Value ?? string.Empty;
@@ -308,7 +308,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                                         subject.Contains("payment", StringComparison.OrdinalIgnoreCase);
                                     var airBnbEmailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, !isPayout) : string.Empty;
 
-                                    _logger.LogInformation("Processing Gmail message: {Message}", !string.IsNullOrWhiteSpace(bookedGuestEmailBody) ? bookedGuestEmailBody : airBnbEmailBody);
+                                    _logger.LogInformation("Gmail message: {Message}", !string.IsNullOrWhiteSpace(bookedGuestEmailBody) ? bookedGuestEmailBody : airBnbEmailBody);
 
                                     // Extract date range from subject and check if today is in range
                                     bool? isInRange = IsCurrentDateInReservationRange(subject);
