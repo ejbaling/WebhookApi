@@ -488,12 +488,12 @@ public partial class GmailNotificationConsumer : BackgroundService
                 }
                 else
                 {
-                    _logger.LogWarning("No new messages found in Gmail history.");
+                    _logger.LogWarning(" Gmail history: No new messages found.");
                 }
             }
             else
             {
-                _logger.LogWarning("No valid Gmail historyId found in push notification.");
+                _logger.LogWarning("Gmail history: No valid historyId found in push notification.");
             }
         }
         else
