@@ -281,19 +281,28 @@ public partial class GmailNotificationConsumer : BackgroundService
                                     // Process Airbnb messages or the test sender email for local testing
                                     // if (!isAirbnbSender && !isTestSender)
                                     if (!isAirbnbSender)
+                                    {
+                                        _logger.LogInformation("Gmail skipping message because sender does not match airbnb.com");  
                                         continue;
+                                    }
 
                                     // Skip processing for certain subjects (list may grow)
                                     var skipSubjectMarkers = new[] { "wrote you a review", "Write a review for", "Reservation confirmed", "Reservation reminder", "Last chance to review", "star review!", "Messages sent off-schedule", "waiting for your review"};
                                     if (skipSubjectMarkers.Any(m => !string.IsNullOrWhiteSpace(subject) && subject.Contains(m, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        _logger.LogInformation("Gmail skipping message because subject matches skip markers.");
                                         continue;
+                                    }
 
                                     var bookedGuestEmailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024) : string.Empty;
 
                                     // Skip processing if the booked guest section is just an Airbnb reaction (e.g. "Reacted ❤️ to ...")
                                     if (!string.IsNullOrWhiteSpace(bookedGuestEmailBody) &&
                                         bookedGuestEmailBody.Contains("Reacted ❤️ to", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        _logger.LogInformation("Gmail skipping message because booked guest section is just an Airbnb reaction.");
                                         continue;
+                                    }
 
                                     var isPayout = subject.Contains("payout", StringComparison.OrdinalIgnoreCase) ||
                                                         subject.Contains("payment", StringComparison.OrdinalIgnoreCase);
