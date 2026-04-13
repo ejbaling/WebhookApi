@@ -488,7 +488,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                 }
                 else
                 {
-                    _logger.LogWarning(" Gmail history: No new messages found.");
+                    _logger.LogWarning("Gmail history: No new messages found.");
                 }
             }
             else
