@@ -160,7 +160,7 @@ try
         var requestBody = await reader.ReadToEndAsync();
 
         // Log or process the webhook payload
-        logger.LogInformation("Received Gmail webhook: {Payload}", requestBody);
+        logger.LogInformation("Received payload from Gmail webhook.");
 
         // Push message to RabbitMQ
         using var connection = await connectionFactory.CreateConnectionAsync();
