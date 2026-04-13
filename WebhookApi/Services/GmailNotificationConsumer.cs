@@ -144,8 +144,6 @@ public partial class GmailNotificationConsumer : BackgroundService
 
             try
             {
-                Console.WriteLine(" [*] Waiting for messages.");
-
                 var consumer = new AsyncEventingBasicConsumer(_channel);
                 consumer.ReceivedAsync += async (model, ea) =>
                 {
@@ -154,8 +152,6 @@ public partial class GmailNotificationConsumer : BackgroundService
 
                     try
                     {
-                        _logger.LogInformation("Processing message: {Message}", strBody);
-
                         var gmailPushData = JsonSerializer.Deserialize<GmailPushData>(strBody);
                         if (gmailPushData?.Message != null)
                         {
@@ -209,9 +205,6 @@ public partial class GmailNotificationConsumer : BackgroundService
 
     private async Task ProcessNotification(GmailMessage gmailMessage)
     {
-        _logger.LogInformation("Processing Gmail notification from {Timestamp}: {MessageId}",
-            gmailMessage.Timestamp, gmailMessage.MessageId);
-
         // Load Gmail API credentials from configuration
         var refreshToken = _configuration["Google:RefreshToken"];
         var clientId = _configuration["Google:ClientId"];
@@ -241,7 +234,6 @@ public partial class GmailNotificationConsumer : BackgroundService
         if (!string.IsNullOrWhiteSpace(gmailMessage.Data))
         {
             var json = Encoding.UTF8.GetString(Convert.FromBase64String(gmailMessage.Data));
-            _logger.LogInformation("Received Gmail push notification data: {Data}", json);
             var data = JsonSerializer.Deserialize<GmailMessageData>(json);
 
             if (data != null && data.HistoryId > 0)
@@ -257,8 +249,6 @@ public partial class GmailNotificationConsumer : BackgroundService
 
                 if (historyResponse.History != null && historyResponse.HistoryId.HasValue)
                 {
-                    _logger.LogInformation("Processing Gmail history from ID: {HistoryId}", historyResponse.HistoryId);
-
                     // Process each history record
                     foreach (var record in historyResponse.History)
                     {
@@ -305,11 +295,17 @@ public partial class GmailNotificationConsumer : BackgroundService
                                         bookedGuestEmailBody.Contains("Reacted ❤️ to", StringComparison.OrdinalIgnoreCase))
                                         continue;
 
+                                    var isPayout = subject.Contains("payout", StringComparison.OrdinalIgnoreCase) ||
+                                                        subject.Contains("payment", StringComparison.OrdinalIgnoreCase);
+                                    var airBnbEmailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, !isPayout) : string.Empty;
+
+                                    _logger.LogInformation("Processing Gmail message: {Message}", !string.IsNullOrWhiteSpace(bookedGuestEmailBody) ? bookedGuestEmailBody : airBnbEmailBody);
+
                                     // Extract date range from subject and check if today is in range
                                     bool? isInRange = IsCurrentDateInReservationRange(subject);
                                     QaResponse? qaResponse = null;
 
-                                    _logger.LogInformation("Current date is {Status} the reservation range.", isInRange.HasValue && isInRange.Value ? "within" : "outside");
+                                    _logger.LogInformation("Gmail current date is {Status} the reservation range.", isInRange.HasValue && isInRange.Value ? "within" : "outside");
 
                                     Config? aiConfig = null;
 
@@ -395,6 +391,7 @@ public partial class GmailNotificationConsumer : BackgroundService
 
                                         try
                                         {
+                                            // AI response to Telegram is sent in ai-service python script
                                             var result = await _httpClient.PostAsJsonAsync("http://100.80.77.91:8000/qa", request);
                                             if (result?.IsSuccessStatusCode == true && result.Content != null)
                                             {
@@ -419,7 +416,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                     var chatId = _configuration["Telegram:ChatId"]; // Your personal Telegram user ID
                                     if (string.IsNullOrWhiteSpace(botToken) || string.IsNullOrWhiteSpace(chatId))
                                     {
-                                        _logger.LogError("Telegram BotToken or chatIc is not configured.");
+                                        _logger.LogError("Gmail Telegram BotToken or chatId is not configured.");
                                         return;
                                     }
                                     
@@ -433,9 +430,10 @@ public partial class GmailNotificationConsumer : BackgroundService
                                             new Telegram.Bot.Types.ChatId(chatId),
                                             text: telegramMessage,
                                             cancellationToken: CancellationToken.None);
-                                        _logger.LogInformation("Forwarded message to Telegram: {Message}", telegramMessage);
+                                        _logger.LogInformation("Gmail forwarded message to Telegram: {Message}", telegramMessage);
                                     }
 
+                                    // AI response to Telegram is sent in ai-service python script  
                                     // if (aiConfig?.Value == true)
                                     // {
                                     //     await botClient.SendTextMessageAsync(
@@ -444,20 +442,15 @@ public partial class GmailNotificationConsumer : BackgroundService
                                     //         cancellationToken: CancellationToken.None);
                                     // }
 
-
-                                    var isPayout = subject.Contains("payout", StringComparison.OrdinalIgnoreCase) ||
-                                                        subject.Contains("payment", StringComparison.OrdinalIgnoreCase);
-                                    var airBnbEmailBody = message.Payload != null ? ExtractMessage(GetEmailBody(message.Payload), 1024, !isPayout) : string.Empty;
-
                                     if (isPayout && CountPayouts(airBnbEmailBody) > 1)
                                     {
                                         var sections = SplitPayoutSections(airBnbEmailBody);
-                                        _logger.LogInformation("Splitting Airbnb payout email into {Count} sections for message {MessageId}", sections.Count, messageId);
+                                        _logger.LogInformation("Gmail splitting Airbnb payout email into {Count} sections for message {MessageId}", sections.Count, messageId);
 
                                         // Safety: if the splitter produced too many sections, skip processing to avoid spurious work
                                         if (sections.Count > 4)
                                         {
-                                            _logger.LogWarning("Detected {Count} payout sections for MessageId={MessageId} which exceeds configured limit of 4; skipping processing.", sections.Count, messageId);
+                                            _logger.LogWarning("Gmail detected {Count} payout sections for MessageId={MessageId} which exceeds configured limit of 4; skipping processing.", sections.Count, messageId);
                                         }
                                         else
                                         {
@@ -466,7 +459,7 @@ public partial class GmailNotificationConsumer : BackgroundService
                                             {
                                                 sectionIndex++;
                                                 var preview = section.Length > 200 ? string.Concat(section.AsSpan(0, 200), "...") : section;
-                                                _logger.LogInformation("Processing payout section {Index}/{Total} for MessageId={MessageId}: {Preview}", sectionIndex, sections.Count, messageId, preview);
+                                                _logger.LogInformation("Gmail processing payout section {Index}/{Total} for MessageId={MessageId}: {Preview}", sectionIndex, sections.Count, messageId, preview);
                                                 await HandleAirbnbExtractionAndSaveAsync(subject, section, bookedGuestEmailBody, isInRange.HasValue && isInRange.Value, qaResponse, messageId, isPayout);
                                             }
                                         }
@@ -491,12 +484,12 @@ public partial class GmailNotificationConsumer : BackgroundService
             }
             else
             {
-                _logger.LogWarning("No valid historyId found in push notification.");
+                _logger.LogWarning("No valid Gmail historyId found in push notification.");
             }
         }
         else
         {
-            _logger.LogWarning("Notification does not contain a data field.");
+            _logger.LogWarning("Gmail notification does not contain a data field.");
         }
     }
 
@@ -811,7 +804,7 @@ public partial class GmailNotificationConsumer : BackgroundService
         // If both bodies are empty or whitespace, skip any DB persistence work
         if (string.IsNullOrWhiteSpace(bookedGuestEmailBody) && string.IsNullOrWhiteSpace(airBnbEmailBody))
         {
-            _logger.LogInformation("Skipping DB save for MessageId={MessageId} because both bookedGuestEmailBody and airBnbEmailBody are empty.", messageId);
+            _logger.LogInformation("Gmail skipping DB save for MessageId={MessageId} because both bookedGuestEmailBody and airBnbEmailBody are empty.", messageId);
             return;
         }
 
@@ -824,12 +817,12 @@ public partial class GmailNotificationConsumer : BackgroundService
             if (extractor != null)
             {
                 aiIds = await extractor.ExtractAsync(subject + "\n" + airBnbEmailBody, CancellationToken.None);
-                _logger.LogInformation("AI extracted identifiers: {@Ids}", aiIds);
+                _logger.LogInformation("Gmail AI extracted identifiers: {@Ids}", aiIds);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "AI identifier extractor failed; falling back to regex extractor");
+            _logger.LogWarning(ex, "Gmail AI identifier extractor failed; falling back to regex extractor");
         }
 
         var (name, email, phone, bookingId, airbnbId, amount, urgentFlag) = (aiIds?.Name, aiIds?.Email, aiIds?.Phone, aiIds?.BookingId, aiIds?.AirbnbId, aiIds?.Amount, aiIds?.Urgent ?? false);
@@ -847,7 +840,7 @@ public partial class GmailNotificationConsumer : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to trigger emergency AMI call for MessageId={MessageId}", messageId);
+                _logger.LogError(ex, "Gmail failed to trigger emergency AMI call for MessageId={MessageId}", messageId);
             }
         }
 
@@ -892,7 +885,7 @@ public partial class GmailNotificationConsumer : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Failed to parse amount string: {Amount}", amount);
+                _logger.LogDebug(ex, "Gmail failed to parse amount string: {Amount}", amount);
             }
 
             var guestPayment = new GuestPayment
@@ -906,7 +899,7 @@ public partial class GmailNotificationConsumer : BackgroundService
 
         await dbContext.SaveChangesAsync();
 
-        _logger.LogInformation("Saved guest message to database with ID: {Id}", guestMessage.Id);
+        _logger.LogInformation("Gmail saved guest message to database with ID: {Id}", guestMessage.Id);
     }
 
     // Split the email body into payout sections (exclude trailing "Total paid" summary)

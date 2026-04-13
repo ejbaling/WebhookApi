@@ -154,13 +154,13 @@ try
     })
     .WithName("GetWeatherForecast");
 
-    app.MapPost("gmail/notifications", async (HttpContext context, IConnectionFactory connectionFactory) =>
+    app.MapPost("gmail/notifications", async (HttpContext context, IConnectionFactory connectionFactory, ILogger<Program> logger) =>
     {
         using var reader = new StreamReader(context.Request.Body);
         var requestBody = await reader.ReadToEndAsync();
 
         // Log or process the webhook payload
-        Console.WriteLine($"Received webhook: {requestBody}");
+        logger.LogInformation("Received Gmail webhook: {Payload}", requestBody);
 
         // Push message to RabbitMQ
         using var connection = await connectionFactory.CreateConnectionAsync();

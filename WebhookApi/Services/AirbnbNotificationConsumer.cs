@@ -151,7 +151,7 @@ public class AirbnbNotificationConsumer : BackgroundService
                             if (!string.IsNullOrWhiteSpace(incomingTitle))
                             {
                                 isInRange = IsCurrentDateInReservationRange(incomingTitle);
-                                _logger.LogInformation("Title parsed for date range: {Title} => InRange={InRange}", incomingTitle, isInRange);
+                                _logger.LogInformation("Airbnb title parsed for date range: {Title} => InRange={InRange}", incomingTitle, isInRange);
                             }
 
                             // If AI marked message as urgent and the reservation is in-range, trigger emergency AMI
