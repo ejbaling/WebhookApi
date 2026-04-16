@@ -204,6 +204,9 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                 return new IdentifierResult(null, null, null, null, null, null, false);
             }
 
+            // Log raw assistant output to help diagnose misclassifications (e.g. accidental urgent:true)
+            _logger.LogInformation("Identifier extractor assistant raw output: {AssistantRaw}", assistantText);
+
             // Clean code fences/backticks
             var cleaned = assistantText.Trim();
             if (cleaned.StartsWith("```"))
