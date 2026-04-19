@@ -34,3 +34,31 @@ Troubleshooting
 - If you see `Embedding request failed: NotFound` for a model, verify the configured embedding model exists on your AI provider (e.g., run `ollama list` / `ollama pull <model>` or configure OpenAI keys).
 
 Want the server to accept a `metadata` JSON field? Open an issue or request and I can add support to the upload handler to accept and store JSON metadata.
+
+## Uploading category files (house-rules)
+
+You can keep deduplicated rules as separate category Markdown files in the `rag-documents/house-rules` folder for easier maintenance and ingestion. A helper PowerShell script is included at `rag-documents/house-rules/upload-house-rules.ps1` to upload every file in that folder to the `/api/rag/upload` endpoint.
+
+Quick steps
+
+- Edit or add category files under `rag-documents/house-rules` (one `.md` per category).
+- From PowerShell run:
+
+```powershell
+cd D:\src\WebhookApi\rag-documents\house-rules
+.\upload-house-rules.ps1 -Insecure
+```
+
+Options
+
+- To point at a different server, pass `-UploadUrl "https://your-server/api/rag/upload"` to the script.
+- Remove `-Insecure` if your server has a valid TLS certificate.
+- The script uses the file base-name as the document `title` and `house_rules/<basename>` as the `source` tag; it also adds a `house_rules` tag.
+
+Manual single-file upload example (curl)
+
+```bash
+curl.exe -v -F "title=Check-In - Redwood" -F "source=house_rules/check_in" -F "tags=house_rules,check_in" -F "file=@D:\src\WebhookApi\rag-documents\house-rules\02-check-in-check-out.md" "https://webhook.tailc2bda.ts.net/api/rag/upload" --insecure
+```
+
+Keeping per-category files makes RAG chunking simpler and keeps content maintainable. If you want, the repository now contains a pre-populated set of category files in `rag-documents/house-rules`.
