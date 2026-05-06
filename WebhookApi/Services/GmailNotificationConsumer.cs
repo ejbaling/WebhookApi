@@ -838,20 +838,20 @@ public partial class GmailNotificationConsumer : BackgroundService
         var suggestion = name ?? bookingId ?? airbnbId ?? email ?? phone ?? amount;
 
         // If AI marked this message as urgent, trigger emergency AMI originate (if configured)
-        if (isInRange && urgentFlag)
-        {
-            try
-            {
-                using var amiScope = _scopeFactory.CreateScope();
-                var amiService = amiScope.ServiceProvider.GetService<IEmergencyAmiService>();
-                if (amiService != null)
-                    await amiService.TriggerEmergencyAsync(CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Gmail failed to trigger emergency AMI call for MessageId={MessageId}", messageId);
-            }
-        }
+        // if (isInRange && urgentFlag)
+        // {
+        //     try
+        //     {
+        //         using var amiScope = _scopeFactory.CreateScope();
+        //         var amiService = amiScope.ServiceProvider.GetService<IEmergencyAmiService>();
+        //         if (amiService != null)
+        //             await amiService.TriggerEmergencyAsync(CancellationToken.None);
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         _logger.LogError(ex, "Gmail failed to trigger emergency AMI call for MessageId={MessageId}", messageId);
+        //     }
+        // }
 
         var guestMessage = new GuestMessage
         {
