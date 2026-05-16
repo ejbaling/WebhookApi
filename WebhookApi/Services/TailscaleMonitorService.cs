@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 
@@ -11,23 +12,36 @@ namespace WebhookApi.Services
         private readonly ILogger<TailscaleMonitorService> _logger;
         private readonly IConfiguration _configuration;
         private readonly IHttpClientFactory _httpClientFactory;
-        private readonly Dictionary<string, bool> _deviceOnlineState = new();
+        private readonly IServiceScopeFactory _scopeFactory;
+        private class DeviceState
+        {
+            public bool IsOnline { get; set; }
+            public DateTime? OfflineSinceUtc { get; set; }
+            public bool OfflineAlertSent { get; set; }
+            public bool EmergencyTriggered { get; set; }
+        }
+
+        private readonly Dictionary<string, DeviceState> _deviceStates = new();
 
         // Telegram client (optional if configured)
         private TelegramBotClient? _telegramClient;
         private string? _telegramChatId;
         
-        public TailscaleMonitorService(ILogger<TailscaleMonitorService> logger, IConfiguration configuration, IHttpClientFactory httpClientFactory)
+        public TailscaleMonitorService(ILogger<TailscaleMonitorService> logger, IConfiguration configuration, IHttpClientFactory httpClientFactory, IServiceScopeFactory scopeFactory)
         {
             _logger = logger;
             _configuration = configuration;
             _httpClientFactory = httpClientFactory;
+            _scopeFactory = scopeFactory;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             var pollIntervalSeconds = _configuration.GetValue<int?>("Tailscale:PollIntervalSeconds") ?? 60;
             var offlineMinutesThreshold = _configuration.GetValue<int?>("Tailscale:OfflineMinutesThreshold") ?? 5;
+            // Emergency AMI: set Tailscale:EmergencyOfflineMinutesThreshold (>0) to enable and delay
+            // the emergency AMI call by that many minutes. Default 0 disables emergency AMI.
+            var emergencyMinutesThreshold = _configuration.GetValue<int?>("Tailscale:EmergencyOfflineMinutesThreshold") ?? 0;
 
             var allowed = _configuration.GetSection("Tailscale:AllowedDeviceNames")?.Get<string[]>() ?? Array.Empty<string>();
             var allowedSet = new HashSet<string>(allowed, StringComparer.OrdinalIgnoreCase);
@@ -110,6 +124,7 @@ namespace WebhookApi.Services
                             continue;
 
                         bool isOnline = false;
+                        DateTime? parsedLastSeen = null;
                         if (device.TryGetProperty("online", out var onlineProp) && onlineProp.ValueKind == JsonValueKind.True)
                         {
                             isOnline = true;
@@ -121,51 +136,101 @@ namespace WebhookApi.Services
                         else if (device.TryGetProperty("lastSeen", out var lastSeenProp) && lastSeenProp.ValueKind == JsonValueKind.String && DateTime.TryParse(lastSeenProp.GetString(), out var lastSeen))
                         {
                             var age = DateTime.UtcNow - lastSeen.ToUniversalTime();
+                            parsedLastSeen = lastSeen.ToUniversalTime();
                             isOnline = age.TotalMinutes <= offlineMinutesThreshold;
                         }
                         else if (device.TryGetProperty("LastSeen", out var lastSeenProp2) && lastSeenProp2.ValueKind == JsonValueKind.String && DateTime.TryParse(lastSeenProp2.GetString(), out var lastSeen2))
                         {
                             var age = DateTime.UtcNow - lastSeen2.ToUniversalTime();
+                            parsedLastSeen = lastSeen2.ToUniversalTime();
                             isOnline = age.TotalMinutes <= offlineMinutesThreshold;
                         }
-
-                        _deviceOnlineState.TryGetValue(id, out var previousOnline);
-
-                        if (!isOnline && previousOnline)
+                        _deviceStates.TryGetValue(id, out var prevState);
+                        if (prevState is null)
                         {
-                            _logger.LogWarning("⚠️ Tailscale device went offline: {Name} ({Id})", name, id);
-                            // send Telegram alert if configured
-                            if (_telegramClient is not null && !string.IsNullOrEmpty(_telegramChatId))
+                            // assume online initially to avoid immediate false alerts
+                            prevState = new DeviceState { IsOnline = true, OfflineSinceUtc = null, OfflineAlertSent = false, EmergencyTriggered = false };
+                        }
+
+                        if (isOnline)
+                        {
+                            if (!prevState.IsOnline)
                             {
-                                _ = SendOfflineAlertAsync(name, id, stoppingToken);
+                                _logger.LogInformation("✅ Tailscale device back online: {Name} ({Id})", name, id);
+                                prevState.IsOnline = true;
+                                prevState.OfflineSinceUtc = null;
+                                prevState.OfflineAlertSent = false;
+
+                                if (_telegramClient is not null && !string.IsNullOrEmpty(_telegramChatId))
+                                {
+                                    _ = SendOnlineAlertAsync(name, id, stoppingToken);
+                                }
+
+                                try
+                                {
+                                    var syncTargetName = _configuration["Tailscale:SyncTargetName"]?.Trim();
+                                    if (!string.IsNullOrEmpty(syncTargetName) && string.Equals(syncTargetName, name, StringComparison.OrdinalIgnoreCase))
+                                        _ = SetDeviceTimeAsync("SONOFF SPM", stoppingToken);
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogWarning(ex, "Failed to trigger SetDeviceTimeAsync for device {Name} ({Id})", name, id);
+                                }
                             }
                         }
-                        else if (isOnline && !previousOnline && _deviceOnlineState.ContainsKey(id))
+                        else
                         {
-                            _logger.LogInformation("✅ Tailscale device back online: {Name} ({Id})", name, id);
-                            // send Telegram alert for device back online if configured
-                            if (_telegramClient is not null && !string.IsNullOrEmpty(_telegramChatId))
+                            // device considered offline
+                            if (prevState.IsOnline)
                             {
-                                _ = SendOnlineAlertAsync(name, id, stoppingToken);
-                            }
+                                // just transitioned to offline; record when it went offline (use API lastSeen if available)
+                                prevState.IsOnline = false;
+                                prevState.OfflineAlertSent = false;
+                                prevState.EmergencyTriggered = false;
+                                prevState.OfflineSinceUtc = parsedLastSeen ?? DateTime.UtcNow;
+                                _logger.LogInformation("Tailscale device appears offline (will alert after threshold): {Name} ({Id}), since {Since}", name, id, prevState.OfflineSinceUtc);
 
-                            // If this device matches the configured sync target, attempt to set its device time
-                            try
-                            {
-                                var syncTargetName = _configuration["Tailscale:SyncTargetName"]?.Trim();
-                                if (!string.IsNullOrEmpty(syncTargetName) && string.Equals(syncTargetName, name, StringComparison.OrdinalIgnoreCase))
-                                    _ = SetDeviceTimeAsync("SONOFF SPM", stoppingToken);
-
-                                
+                                // (No immediate alert/AMI here) — record transition and wait for thresholds
                             }
-                            catch (Exception ex)
+                            else
                             {
-                                _logger.LogWarning(ex, "Failed to trigger SetDeviceTimeAsync for device {Name} ({Id})", name, id);
+                                // already offline — check if we should send the alert now
+                                if (prevState.OfflineSinceUtc.HasValue)
+                                {
+                                    var offlineDuration = DateTime.UtcNow - prevState.OfflineSinceUtc.Value;
+                                    if (!prevState.OfflineAlertSent && offlineDuration.TotalMinutes >= offlineMinutesThreshold)
+                                    {
+                                        _logger.LogWarning("⚠️ Tailscale device has been offline for {Minutes} minutes: {Name} ({Id})", Math.Floor(offlineDuration.TotalMinutes), name, id);
+                                        if (_telegramClient is not null && !string.IsNullOrEmpty(_telegramChatId))
+                                        {
+                                            _ = SendOfflineAlertAsync(name, id, stoppingToken);
+                                        }
+                                        prevState.OfflineAlertSent = true;
+                                    }
+                                    // Check emergency threshold (if configured > 0) and trigger AMI once
+                                    if (!prevState.EmergencyTriggered && emergencyMinutesThreshold > 0 && offlineDuration.TotalMinutes >= emergencyMinutesThreshold)
+                                    {
+                                        try
+                                        {
+                                            using var amiScope = _scopeFactory.CreateScope();
+                                            var amiService = amiScope.ServiceProvider.GetService<IEmergencyAmiService>();
+                                            if (amiService != null)
+                                            {
+                                                await amiService.TriggerEmergencyAsync(CancellationToken.None);
+                                                prevState.EmergencyTriggered = true;
+                                                _logger.LogWarning("Tailscale monitor triggered emergency AMI after threshold for device {Name} ({Id}).", name, id);
+                                            }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            _logger.LogError(ex, "Failed to trigger emergency AMI call for offline device {Name} ({Id})", name, id);
+                                        }
+                                    }
+                                }
                             }
-                            
                         }
-                        
-                        _deviceOnlineState[id] = isOnline;
+
+                        _deviceStates[id] = prevState;
                     }
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
