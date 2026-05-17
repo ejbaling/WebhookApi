@@ -126,6 +126,23 @@ public class AirbnbNotificationConsumer : BackgroundService
 
                         try
                         {
+                            // Ignore reaction messages (e.g. "Reacted ❤️ to \"...\"") so they
+                            // are not passed to the identifier extractor or considered for AMI.
+                            if (!string.IsNullOrWhiteSpace(strBody) && strBody.Contains("Reacted ❤️ to", StringComparison.OrdinalIgnoreCase))
+                            {
+                                _logger.LogInformation("Ignoring reaction message: {Message}", strBody);
+                                if (_channel != null)
+                                    await _channel.BasicAckAsync(ea.DeliveryTag, false);
+                                return;
+                            }
+                            if (!string.IsNullOrWhiteSpace(incomingMessage) && incomingMessage.Contains("Reacted ❤️ to", StringComparison.OrdinalIgnoreCase))
+                            {
+                                _logger.LogInformation("Ignoring reaction payload message: {Message}", incomingMessage);
+                                if (_channel != null)
+                                    await _channel.BasicAckAsync(ea.DeliveryTag, false);
+                                return;
+                            }
+
                             _logger.LogInformation("Airbnb message: {Message}", strBody);
 
                             using var scope = _scopeFactory.CreateScope();
