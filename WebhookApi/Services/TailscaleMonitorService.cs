@@ -188,9 +188,13 @@ namespace WebhookApi.Services
                                 prevState.OfflineAlertSent = false;
                                 prevState.EmergencyTriggered = false;
                                 prevState.OfflineSinceUtc = parsedLastSeen ?? DateTime.UtcNow;
-                                _logger.LogInformation("Tailscale device appears offline (will alert after threshold): {Name} ({Id}), since {Since}", name, id, prevState.OfflineSinceUtc);
+                                _logger.LogInformation("Tailscale device went offline: {Name} ({Id}), since {Since}", name, id, prevState.OfflineSinceUtc);
 
-                                // (No immediate alert/AMI here) — record transition and wait for thresholds
+                                if (_telegramClient is not null && !string.IsNullOrEmpty(_telegramChatId))
+                                {
+                                    _ = SendOfflineAlertAsync(name, id, stoppingToken);
+                                    prevState.OfflineAlertSent = true;
+                                }
                             }
                             else
                             {
