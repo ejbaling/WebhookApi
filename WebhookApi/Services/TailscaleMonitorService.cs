@@ -201,12 +201,12 @@ namespace WebhookApi.Services
                                 if (prevState.OfflineSinceUtc.HasValue)
                                 {
                                     var offlineDuration = DateTime.UtcNow - prevState.OfflineSinceUtc.Value;
-                                    if (!prevState.OfflineAlertSent && offlineDuration.TotalMinutes >= offlineMinutesThreshold)
+                                    if (!prevState.OfflineAlertSent && emergencyMinutesThreshold > 0 && offlineDuration.TotalMinutes >= emergencyMinutesThreshold)
                                     {
-                                        _logger.LogWarning("⏰ Tailscale device is still offline after {Minutes} minutes: {Name} ({Id})", Math.Floor(offlineDuration.TotalMinutes), name, id);
+                                        _logger.LogWarning("⏰ Tailscale device is still offline after reaching the emergency threshold at {Minutes} minutes: {Name} ({Id})", Math.Floor(offlineDuration.TotalMinutes), name, id);
                                         if (_telegramClient is not null && !string.IsNullOrEmpty(_telegramChatId))
                                         {
-                                            _ = SendOfflineReminderAlertAsync(name, id, offlineDuration, stoppingToken);
+                                            _ = SendEmergencyThresholdOfflineAlertAsync(name, id, offlineDuration, stoppingToken);
                                         }
                                         prevState.OfflineAlertSent = true;
                                     }
@@ -274,7 +274,7 @@ namespace WebhookApi.Services
             }
         }
 
-        private async Task SendOfflineReminderAlertAsync(string name, string id, TimeSpan offlineDuration, CancellationToken ct)
+        private async Task SendEmergencyThresholdOfflineAlertAsync(string name, string id, TimeSpan offlineDuration, CancellationToken ct)
         {
             try
             {
@@ -282,7 +282,7 @@ namespace WebhookApi.Services
                     return;
 
                 var minutesOffline = Math.Floor(offlineDuration.TotalMinutes);
-                var text = $"⏰ Tailscale device still offline: {name} ({id}) for {minutesOffline} minutes as of {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC";
+                var text = $"⏰ Tailscale device still offline after reaching the emergency threshold: {name} ({id}) has been offline for {minutesOffline} minutes as of {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC";
                 await _telegramClient.SendTextMessageAsync(new ChatId(_telegramChatId), text, cancellationToken: ct);
                 _logger.LogInformation("Sent Telegram reminder for offline device {Name} ({Id})", name, id);
             }
