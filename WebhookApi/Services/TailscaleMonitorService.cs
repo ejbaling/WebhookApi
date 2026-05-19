@@ -193,7 +193,6 @@ namespace WebhookApi.Services
                                 if (_telegramClient is not null && !string.IsNullOrEmpty(_telegramChatId))
                                 {
                                     _ = SendOfflineAlertAsync(name, id, stoppingToken);
-                                    prevState.OfflineAlertSent = true;
                                 }
                             }
                             else
@@ -204,16 +203,19 @@ namespace WebhookApi.Services
                                     var offlineDuration = DateTime.UtcNow - prevState.OfflineSinceUtc.Value;
                                     if (!prevState.OfflineAlertSent && offlineDuration.TotalMinutes >= offlineMinutesThreshold)
                                     {
-                                        _logger.LogWarning("⚠️ Tailscale device has been offline for {Minutes} minutes: {Name} ({Id})", Math.Floor(offlineDuration.TotalMinutes), name, id);
+                                        _logger.LogWarning("⏰ Tailscale device is still offline after {Minutes} minutes: {Name} ({Id})", Math.Floor(offlineDuration.TotalMinutes), name, id);
                                         if (_telegramClient is not null && !string.IsNullOrEmpty(_telegramChatId))
                                         {
-                                            _ = SendOfflineAlertAsync(name, id, stoppingToken);
+                                            _ = SendOfflineReminderAlertAsync(name, id, offlineDuration, stoppingToken);
                                         }
                                         prevState.OfflineAlertSent = true;
                                     }
+
                                     // Check emergency threshold (if configured > 0) and trigger AMI once
                                     if (!prevState.EmergencyTriggered && emergencyMinutesThreshold > 0 && offlineDuration.TotalMinutes >= emergencyMinutesThreshold)
                                     {
+                                        _logger.LogWarning("⚠️ Tailscale device has been offline for {Minutes} minutes: {Name} ({Id})", Math.Floor(offlineDuration.TotalMinutes), name, id);
+
                                         try
                                         {
                                             using var amiScope = _scopeFactory.CreateScope();
@@ -269,6 +271,28 @@ namespace WebhookApi.Services
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to send Telegram alert for device {Name} ({Id})", name, id);
+            }
+        }
+
+        private async Task SendOfflineReminderAlertAsync(string name, string id, TimeSpan offlineDuration, CancellationToken ct)
+        {
+            try
+            {
+                if (_telegramClient is null || string.IsNullOrEmpty(_telegramChatId))
+                    return;
+
+                var minutesOffline = Math.Floor(offlineDuration.TotalMinutes);
+                var text = $"⏰ Tailscale device still offline: {name} ({id}) for {minutesOffline} minutes as of {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC";
+                await _telegramClient.SendTextMessageAsync(new ChatId(_telegramChatId), text, cancellationToken: ct);
+                _logger.LogInformation("Sent Telegram reminder for offline device {Name} ({Id})", name, id);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // ignore cancellation during shutdown
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to send Telegram reminder for device {Name} ({Id})", name, id);
             }
         }
 
