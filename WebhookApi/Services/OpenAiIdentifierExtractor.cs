@@ -275,7 +275,7 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                         }
                         else
                         {
-                            _logger.LogDebug("Heuristic scoring did not mark urgent (score={Score}).", score);
+                            _logger.LogInformation("Heuristic scoring did not mark urgent (score={Score}).", score);
                         }
                     }
 
