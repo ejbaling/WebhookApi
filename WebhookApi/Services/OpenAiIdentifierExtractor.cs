@@ -317,6 +317,9 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                     if (Regex.IsMatch(t, @"^\s*ok\s+po[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                         score -= 2;
 
+                    // Could not parse assistant output and heuristic did not mark urgent
+                    _logger.LogWarning("Identifier extractor: message cannot be parsed; heuristic score={Score}. Cleaned JSON: {Cleaned}", score, cleaned);
+
                     if (score >= 3)
                         return new IdentifierResult(null, null, null, null, null, null, true);
                 }
