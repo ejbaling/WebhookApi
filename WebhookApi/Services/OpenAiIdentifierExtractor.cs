@@ -244,16 +244,41 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                             _logger.LogInformation("Moved amount-like Name into Amount: {Amount}", movedAmount);
                         }
 
-                        // Heuristic fallback: if model returned non-urgent but the original message contains
-                        // a question or permission request, mark as urgent.
+                        // Heuristic scoring fallback: use a small scored heuristic to avoid
+                        // false positives from short acknowledgements like "ok po".
                         if (!parsed.Urgent)
                         {
-                            var qPattern = new System.Text.RegularExpressions.Regex(@"\?|\b(can|may|ask|mag\s+ask|pwede|pwede\s+ba|okay\s+lang|iwan|leave|allow|permit|pwedeng)\b",
-                                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
-                            if (qPattern.IsMatch(text))
+                            int score = 0;
+                            var t = (text ?? string.Empty).ToLowerInvariant();
+
+                            // 1. Strong signal: question mark
+                            if (t.Contains("?"))
+                                score += 3;
+
+                            // 2. Strong request patterns (Taglish-aware)
+                            if (Regex.IsMatch(t, @"\b(pwede\s+ba|can\s+i|may\s+i|ask)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                                score += 2;
+
+                            // 3. Action keywords (weaker signal alone)
+                            if (Regex.IsMatch(t, @"\b(leave|cancel|extend|refund|permit|allow|request)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                                score += 1;
+
+                            // 4. Boost if polite request structure exists
+                            if (Regex.IsMatch(t, @"\b(pwede|can|may)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                                score += 1;
+
+                            // 5. Reduce noise from short acknowledgements
+                            if (Regex.IsMatch(t, @"^\s*ok\s+po[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                                score -= 2;
+
+                            if (score >= 3)
                             {
                                 parsed = parsed with { Urgent = true };
-                                _logger.LogInformation("Marked message as urgent by heuristic fallback.");
+                                _logger.LogInformation("Marked message as urgent by heuristic scoring (score={Score}).", score);
+                            }
+                            else
+                            {
+                                _logger.LogDebug("Heuristic scoring did not mark urgent (score={Score}).", score);
                             }
                         }
 
@@ -279,13 +304,24 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                     }
                     else
                     {
-                        // If we couldn't parse but the original text is clearly a question, return urgent
-                        var qPattern = new System.Text.RegularExpressions.Regex(@"\?|\b(can|may|ask|mag\s+ask|pwede|pwede\s+ba|okay\s+lang|iwan|leave|allow|permit|pwedeng)\b",
-                            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
-                        if (qPattern.IsMatch(text))
-                        {
+                        // If we couldn't parse the assistant JSON, use the scoring fallback
+                        // to decide whether the original message appears urgent.
+                        int score = 0;
+                        var t = (text ?? string.Empty).ToLowerInvariant();
+
+                        if (t.Contains("?"))
+                            score += 3;
+                        if (Regex.IsMatch(t, @"\b(pwede\s+ba|can\s+i|may\s+i|ask)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                            score += 2;
+                        if (Regex.IsMatch(t, @"\b(leave|cancel|extend|refund|permit|allow|request)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                            score += 1;
+                        if (Regex.IsMatch(t, @"\b(pwede|can|may)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                            score += 1;
+                        if (Regex.IsMatch(t, @"^\s*ok\s+po[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                            score -= 2;
+
+                        if (score >= 3)
                             return new IdentifierResult(null, null, null, null, null, null, true);
-                        }
                     }
             }
             catch (Exception ex)
