@@ -198,12 +198,6 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                 return new IdentifierResult(null, null, null, null, null, null, false);
             }
 
-            if (string.IsNullOrWhiteSpace(assistantText))
-            {
-                _logger.LogWarning("Identifier extractor returned empty completion content");
-                return new IdentifierResult(null, null, null, null, null, null, false);
-            }
-
             // Log raw assistant output to help diagnose misclassifications (e.g. accidental urgent:true)
             _logger.LogInformation("Identifier extractor assistant raw output: {AssistantRaw}", assistantText);
 
@@ -229,100 +223,103 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                 cleaned = cleaned.Substring(firstBrace, lastBrace - firstBrace + 1);
             }
 
-                try
+            try
+            {
+                // Log the cleaned JSON before attempting to deserialize to aid debugging
+                _logger.LogInformation("Identifier extractor cleaned JSON before deserialize: {Cleaned}", cleaned);
+
+                var opt = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var parsed = JsonSerializer.Deserialize<IdentifierResult>(cleaned, opt);
+                if (parsed != null)
                 {
-                    var opt = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                    var parsed = JsonSerializer.Deserialize<IdentifierResult>(cleaned, opt);
-                    if (parsed != null)
+                    // Defensive fix: if the model accidentally put an amount/currency in the `name` field,
+                    // move it into `Amount` so the name-fallback can run and we don't persist currency as name.
+                    if (!string.IsNullOrWhiteSpace(parsed.Name) && LooksLikeAmount(parsed.Name))
                     {
-                        // Defensive fix: if the model accidentally put an amount/currency in the `name` field,
-                        // move it into `Amount` so the name-fallback can run and we don't persist currency as name.
-                        if (!string.IsNullOrWhiteSpace(parsed.Name) && LooksLikeAmount(parsed.Name))
-                        {
-                            var movedAmount = parsed.Name.Trim();
-                            parsed = parsed with { Name = null, Amount = string.IsNullOrWhiteSpace(parsed.Amount) ? movedAmount : parsed.Amount };
-                            _logger.LogInformation("Moved amount-like Name into Amount: {Amount}", movedAmount);
-                        }
-
-                        // Heuristic scoring fallback: use a small scored heuristic to avoid
-                        // false positives from short acknowledgements like "ok po".
-                        if (!parsed.Urgent)
-                        {
-                            int score = 0;
-                            var t = (text ?? string.Empty).ToLowerInvariant();
-
-                            // 1. Strong signal: question mark
-                            if (t.Contains("?"))
-                                score += 3;
-
-                            // 2. Strong request patterns (Taglish-aware)
-                            if (Regex.IsMatch(t, @"\b(pwede\s+ba|can\s+i|may\s+i|ask)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
-                                score += 2;
-
-                            // 3. Action keywords (weaker signal alone)
-                            if (Regex.IsMatch(t, @"\b(leave|cancel|extend|refund|permit|allow|request)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
-                                score += 1;
-
-                            // 4. Boost if polite request structure exists
-                            if (Regex.IsMatch(t, @"\b(pwede|can|may)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
-                                score += 1;
-
-                            // 5. Reduce noise from short acknowledgements
-                            if (Regex.IsMatch(t, @"^\s*ok\s+po[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled))
-                                score -= 2;
-
-                            if (score >= 3)
-                            {
-                                parsed = parsed with { Urgent = true };
-                                _logger.LogInformation("Marked message as urgent by heuristic scoring (score={Score}).", score);
-                            }
-                            else
-                            {
-                                _logger.LogDebug("Heuristic scoring did not mark urgent (score={Score}).", score);
-                            }
-                        }
-
-                        // Fallback: if name is missing from the model output, try to extract a sender name
-                        // from the original message text (handles standalone names or headers like "Respond to NAME").
-                        if (string.IsNullOrWhiteSpace(parsed.Name))
-                        {
-                            var namePattern = new System.Text.RegularExpressions.Regex(
-                                @"(?m)^\s*Respond to(?:'s|’s|\:)?\s*([A-Z][\p{L}\-']+(?:\s+[A-Z][\p{L}\-']+)*)|(?m)^\s*([A-Z][\p{L}\-']+(?:\s+[A-Z][\p{L}\-']+)*)\s*$",
-                                System.Text.RegularExpressions.RegexOptions.Compiled);
-                            var m = namePattern.Match(text ?? string.Empty);
-                            if (m.Success)
-                            {
-                                var name = !string.IsNullOrEmpty(m.Groups[1].Value) ? m.Groups[1].Value : m.Groups[2].Value;
-                                if (!string.IsNullOrWhiteSpace(name))
-                                {
-                                    parsed = parsed with { Name = name.Trim() };
-                                    _logger.LogInformation("Filled missing name from text fallback: {Name}", name);
-                                }
-                            }
-                        }
-                        return parsed;
+                        var movedAmount = parsed.Name.Trim();
+                        parsed = parsed with { Name = null, Amount = string.IsNullOrWhiteSpace(parsed.Amount) ? movedAmount : parsed.Amount };
+                        _logger.LogInformation("Moved amount-like Name into Amount: {Amount}", movedAmount);
                     }
-                    else
+
+                    // Heuristic scoring fallback: use a small scored heuristic to avoid
+                    // false positives from short acknowledgements like "ok po".
+                    if (!parsed.Urgent)
                     {
-                        // If we couldn't parse the assistant JSON, use the scoring fallback
-                        // to decide whether the original message appears urgent.
                         int score = 0;
                         var t = (text ?? string.Empty).ToLowerInvariant();
 
+                        // 1. Strong signal: question mark
                         if (t.Contains("?"))
                             score += 3;
+
+                        // 2. Strong request patterns (Taglish-aware)
                         if (Regex.IsMatch(t, @"\b(pwede\s+ba|can\s+i|may\s+i|ask)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                             score += 2;
+
+                        // 3. Action keywords (weaker signal alone)
                         if (Regex.IsMatch(t, @"\b(leave|cancel|extend|refund|permit|allow|request)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                             score += 1;
+
+                        // 4. Boost if polite request structure exists
                         if (Regex.IsMatch(t, @"\b(pwede|can|may)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                             score += 1;
+
+                        // 5. Reduce noise from short acknowledgements
                         if (Regex.IsMatch(t, @"^\s*ok\s+po[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                             score -= 2;
 
                         if (score >= 3)
-                            return new IdentifierResult(null, null, null, null, null, null, true);
+                        {
+                            parsed = parsed with { Urgent = true };
+                            _logger.LogInformation("Marked message as urgent by heuristic scoring (score={Score}).", score);
+                        }
+                        else
+                        {
+                            _logger.LogDebug("Heuristic scoring did not mark urgent (score={Score}).", score);
+                        }
                     }
+
+                    // Fallback: if name is missing from the model output, try to extract a sender name
+                    // from the original message text (handles standalone names or headers like "Respond to NAME").
+                    if (string.IsNullOrWhiteSpace(parsed.Name))
+                    {
+                        var namePattern = new System.Text.RegularExpressions.Regex(
+                            @"(?m)^\s*Respond to(?:'s|’s|\:)?\s*([A-Z][\p{L}\-']+(?:\s+[A-Z][\p{L}\-']+)*)|(?m)^\s*([A-Z][\p{L}\-']+(?:\s+[A-Z][\p{L}\-']+)*)\s*$",
+                            System.Text.RegularExpressions.RegexOptions.Compiled);
+                        var m = namePattern.Match(text ?? string.Empty);
+                        if (m.Success)
+                        {
+                            var name = !string.IsNullOrEmpty(m.Groups[1].Value) ? m.Groups[1].Value : m.Groups[2].Value;
+                            if (!string.IsNullOrWhiteSpace(name))
+                            {
+                                parsed = parsed with { Name = name.Trim() };
+                                _logger.LogInformation("Filled missing name from text fallback: {Name}", name);
+                            }
+                        }
+                    }
+                    return parsed;
+                }
+                else
+                {
+                    // If we couldn't parse the assistant JSON, use the scoring fallback
+                    // to decide whether the original message appears urgent.
+                    int score = 0;
+                    var t = (text ?? string.Empty).ToLowerInvariant();
+
+                    if (t.Contains("?"))
+                        score += 3;
+                    if (Regex.IsMatch(t, @"\b(pwede\s+ba|can\s+i|may\s+i|ask)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                        score += 2;
+                    if (Regex.IsMatch(t, @"\b(leave|cancel|extend|refund|permit|allow|request)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                        score += 1;
+                    if (Regex.IsMatch(t, @"\b(pwede|can|may)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                        score += 1;
+                    if (Regex.IsMatch(t, @"^\s*ok\s+po[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                        score -= 2;
+
+                    if (score >= 3)
+                        return new IdentifierResult(null, null, null, null, null, null, true);
+                }
             }
             catch (Exception ex)
             {
