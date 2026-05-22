@@ -256,8 +256,12 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                         if (Regex.IsMatch(t, @"\b(pwede\s+ba|can\s+i|may\s+i|ask)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                             score += 2;
 
+                        // 2a. Cancellation / delay strong signal (treat as higher priority)
+                        if (Regex.IsMatch(t, @"\b(cancel|cancelled|canceling|cancelled|delay|delayed|no-?show|service\s+cancelled)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                            score += 2;
+
                         // 3. Action keywords (weaker signal alone)
-                        if (Regex.IsMatch(t, @"\b(leave|cancel|extend|refund|permit|allow|request)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                        if (Regex.IsMatch(t, @"\b(leave|extend|refund|permit|allow|request)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                             score += 1;
 
                         // 4. Boost if polite request structure exists
@@ -310,7 +314,9 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                         score += 3;
                     if (Regex.IsMatch(t, @"\b(pwede\s+ba|can\s+i|may\s+i|ask)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                         score += 2;
-                    if (Regex.IsMatch(t, @"\b(leave|cancel|extend|refund|permit|allow|request)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                    if (Regex.IsMatch(t, @"\b(cancel|cancelled|canceling|cancelled|delay|delayed|no-?show|service\s+cancelled)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                        score += 2;
+                    if (Regex.IsMatch(t, @"\b(leave|extend|refund|permit|allow|request)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                         score += 1;
                     if (Regex.IsMatch(t, @"\b(pwede|can|may)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                         score += 1;
