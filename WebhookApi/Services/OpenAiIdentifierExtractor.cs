@@ -257,19 +257,19 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
 
                         // 2. Strong request patterns (Taglish-aware)
                         if (Regex.IsMatch(t, @"\b(pwede\s+ba|can\s+i|may\s+i|ask)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
-                            score += 2;
+                            score += 3;
 
                         // 2a. Cancellation / delay strong signal (treat as higher priority)
                         if (Regex.IsMatch(t, @"\b(cancel|cancelled|canceling|cancelled|delay|delayed|no-?show|service\s+cancelled)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
-                            score += 2;
+                            score += 3;
 
                         // 3. Action keywords (weaker signal alone)
                         if (Regex.IsMatch(t, @"\b(leave|extend|refund|permit|allow|request)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
-                            score += 1;
+                            score += 3;
 
                         // 4. Boost if polite request structure exists
                         if (Regex.IsMatch(t, @"\b(pwede|can|may)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
-                            score += 1;
+                            score += 3;
 
                         // 5. Reduce noise from short acknowledgements
                         if (Regex.IsMatch(t, @"^\s*ok\s+po[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled))
@@ -316,13 +316,13 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                     if (t.Contains("?"))
                         score += 3;
                     if (Regex.IsMatch(t, @"\b(pwede\s+ba|can\s+i|may\s+i|ask)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
-                        score += 2;
+                        score += 3;
                     if (Regex.IsMatch(t, @"\b(cancel|cancelled|canceling|cancelled|delay|delayed|no-?show|service\s+cancelled)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
-                        score += 2;
+                        score += 3;
                     if (Regex.IsMatch(t, @"\b(leave|extend|refund|permit|allow|request)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
-                        score += 1;
+                        score += 3;
                     if (Regex.IsMatch(t, @"\b(pwede|can|may)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
-                        score += 1;
+                        score += 3;
                     if (Regex.IsMatch(t, @"^\s*ok\s+po[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                         score -= 2;
 
