@@ -250,6 +250,9 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                     {
                         int score = 0;
                         var t = (text ?? string.Empty).ToLowerInvariant();
+                        // Debug: log normalized text and acknowledgement match result
+                        var okMatch = Regex.IsMatch(t, @"^\s*ok(?:ay)?(?:(?:\s+|,\s*)po)?[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+                        _logger.LogDebug("Heuristic debug (parsed present): t='{Text}', okMatch={OkMatch}", t, okMatch);
 
                         // 1. Strong signal: question mark
                         if (t.Contains("?"))
@@ -272,7 +275,7 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                             score += 3;
 
                         // 5. Reduce noise from short acknowledgements
-                        if (Regex.IsMatch(t, @"^\s*ok(?:ay)?(?:(?:\s+|,\s*)po)?[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                        if (okMatch)
                             score -= 2;
 
                         if (score >= 3)
@@ -312,6 +315,9 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                     // to decide whether the original message appears urgent.
                     int score = 0;
                     var t = (text ?? string.Empty).ToLowerInvariant();
+                    // Debug: log normalized text and acknowledgement match result (parsed null fallback)
+                    var okMatchFallback = Regex.IsMatch(t, @"^\s*ok(?:ay)?(?:(?:\s+|,\s*)po)?[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+                    _logger.LogDebug("Heuristic debug (parsed null): t='{Text}', okMatch={OkMatch}", t, okMatchFallback);
 
                     if (t.Contains("?"))
                         score += 3;
@@ -323,7 +329,7 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                         score += 3;
                     if (Regex.IsMatch(t, @"\b(pwede|can|may)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                         score += 3;
-                    if (Regex.IsMatch(t, @"^\s*ok(?:ay)?(?:(?:\s+|,\s*)po)?[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                    if (okMatchFallback)
                         score -= 2;
 
                     // Could not parse assistant output and heuristic did not mark urgent
