@@ -272,7 +272,7 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                             score += 3;
 
                         // 5. Reduce noise from short acknowledgements
-                        if (Regex.IsMatch(t, @"^\s*ok(?:ay)?(?:\s+po)?[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                        if (Regex.IsMatch(t, @"^\s*ok(?:ay)?(?:(?:\s+|,\s*)po)?[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                             score -= 2;
 
                         if (score >= 3)
@@ -323,7 +323,7 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                         score += 3;
                     if (Regex.IsMatch(t, @"\b(pwede|can|may)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                         score += 3;
-                    if (Regex.IsMatch(t, @"^\s*ok(?:ay)?(?:\s+po)?[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                    if (Regex.IsMatch(t, @"^\s*ok(?:ay)?(?:(?:\s+|,\s*)po)?[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                         score -= 2;
 
                     // Could not parse assistant output and heuristic did not mark urgent
