@@ -144,7 +144,7 @@ public class AirbnbNotificationConsumer : BackgroundService
                                 return;
                             }
 
-                            _logger.LogInformation("Airbnb message: {Message}", strBody);
+                            _logger.LogInformation("Airbnb xxxxxxxxxmessage: {Message}", strBody);
 
                             using var scope = _scopeFactory.CreateScope();
                             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
