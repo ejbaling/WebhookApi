@@ -66,7 +66,6 @@ public class AirbnbNotificationConsumer : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("TEST AirbnbNotificationConsumer starting...");
         if (!bool.TryParse(_configuration["AirbnbNotification:Enabled"], out var isEnabled))
             isEnabled = true; // enabled by default
 
