@@ -249,10 +249,25 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                     if (!parsed.Urgent)
                     {
                         int score = 0;
-                        var t = (text ?? string.Empty).ToLowerInvariant();
-                        // Debug: log normalized text and acknowledgement match result
+                        var raw = text ?? string.Empty;
+                        // If the incoming text is a JSON payload with a `message` property,
+                        // prefer the message contents for heuristics (common for Airbnb webhook).
+                        string messageOnly = raw;
+                        try
+                        {
+                            using var doc = JsonDocument.Parse(raw);
+                            if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("message", out var m) && m.ValueKind == JsonValueKind.String)
+                                messageOnly = m.GetString() ?? raw;
+                        }
+                        catch (JsonException)
+                        {
+                            // not JSON — fall back to raw text
+                        }
+
+                        var t = messageOnly.ToLowerInvariant();
+                        // Debug: log both the raw payload and the extracted message, plus match result
                         var okMatch = Regex.IsMatch(t, @"^\s*ok(?:ay)?(?:(?:\s+|,\s*)po)?[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-                        _logger.LogDebug("Heuristic debug (parsed present): t='{Text}', okMatch={OkMatch}", t, okMatch);
+                        _logger.LogDebug("Heuristic debug (parsed present): raw='{Raw}', message='{Message}', okMatch={OkMatch}", raw, t, okMatch);
 
                         // 1. Strong signal: question mark
                         if (t.Contains("?"))
@@ -314,10 +329,23 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                     // If we couldn't parse the assistant JSON, use the scoring fallback
                     // to decide whether the original message appears urgent.
                     int score = 0;
-                    var t = (text ?? string.Empty).ToLowerInvariant();
-                    // Debug: log normalized text and acknowledgement match result (parsed null fallback)
+                    var raw = text ?? string.Empty;
+                    string messageOnly = raw;
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(raw);
+                        if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("message", out var m) && m.ValueKind == JsonValueKind.String)
+                            messageOnly = m.GetString() ?? raw;
+                    }
+                    catch (JsonException)
+                    {
+                        // ignore
+                    }
+
+                    var t = messageOnly.ToLowerInvariant();
+                    // Debug: log both the raw payload and the extracted message for fallback branch
                     var okMatchFallback = Regex.IsMatch(t, @"^\s*ok(?:ay)?(?:(?:\s+|,\s*)po)?[.!?]?\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-                    _logger.LogDebug("Heuristic debug (parsed null): t='{Text}', okMatch={OkMatch}", t, okMatchFallback);
+                    _logger.LogDebug("Heuristic debug (parsed null): raw='{Raw}', message='{Message}', okMatch={OkMatch}", raw, t, okMatchFallback);
 
                     if (t.Contains("?"))
                         score += 3;
