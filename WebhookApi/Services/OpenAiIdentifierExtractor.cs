@@ -289,6 +289,10 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                         if (Regex.IsMatch(t, @"\b(pwede|can|may)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                             score += 3;
 
+                        // 4a. Indirect/polite request patterns (e.g., "we wanted to", "if it's ok")
+                        if (Regex.IsMatch(t, @"\bwe\s+want(?:ed)?\b|\bwant(?:ed)?\s+to\b|\bif\s+it(?:'|’)?s(?:\s+only)?\s+ok(?:ay)?\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                            score += 3;
+
                         // 5. Reduce noise from short acknowledgements
                         if (okMatch)
                             score -= 2;
@@ -356,6 +360,10 @@ public class OpenAiIdentifierExtractor : IIdentifierExtractor
                     if (Regex.IsMatch(t, @"\b(leave|extend|refund|permit|allow|request)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                         score += 3;
                     if (Regex.IsMatch(t, @"\b(pwede|can|may)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                        score += 3;
+
+                    // Indirect/polite request patterns (fallback branch)
+                    if (Regex.IsMatch(t, @"\bwe\s+want(?:ed)?\b|\bwant(?:ed)?\s+to\b|\bif\s+it(?:'|’)?s(?:\s+only)?\s+ok(?:ay)?\b", RegexOptions.IgnoreCase | RegexOptions.Compiled))
                         score += 3;
                     if (okMatchFallback)
                         score -= 2;
