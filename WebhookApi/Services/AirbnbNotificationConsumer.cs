@@ -1,4 +1,5 @@
 using System.Text;
+using System.Net.Http;
 using System.Text.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -37,6 +38,34 @@ public class AirbnbNotificationConsumer : BackgroundService
         _logger = logger;
         _configuration = configuration;
         _scopeFactory = scopeFactory;
+    }
+
+    public async Task SendIngestionEventAsync(HttpClient httpClient, string message, string? reservationId = null, CancellationToken cancellationToken = default)
+    {
+        var url = _configuration["Ingestion:Url"] ?? throw new InvalidOperationException("Ingestion URL not configured");
+
+        var payload = new
+        {
+            contextId = "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            sourcePlatform = "string",
+            externalEventId = "string",
+            eventType = "GuestMessage",
+            payload = new { message, reservationId },
+            eventOccurredUtc = "2026-06-05T03:17:43.485Z"
+        };
+
+        var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        using var resp = await httpClient.PostAsync(url, content, cancellationToken);
+        if (!resp.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Ingestion POST to {Url} returned {StatusCode}: {Reason}", url, resp.StatusCode, resp.ReasonPhrase);
+        }
+        else
+        {
+            _logger.LogInformation("Ingestion event posted successfully to {Url}", url);
+        }
     }
 
     private async Task<bool> TryConnect()
@@ -217,6 +246,41 @@ public class AirbnbNotificationConsumer : BackgroundService
                             await dbContext.SaveChangesAsync(stoppingToken);
 
                             _logger.LogInformation("Airbnb message saved to database with ID {Id}", guestMessage.Id);
+
+                            // Call ingestion service only when reservation title/date indicates message is in-range
+                            if (isInRange.HasValue && isInRange.Value)
+                            {
+                                try
+                                {
+                                    var sendMessage = strBody;
+                                    var reservationId = guestMessage.BookingId ?? guestMessage.AirbnbId ?? string.Empty;
+
+                                    var httpClientFactory = scope.ServiceProvider.GetService<IHttpClientFactory>();
+                                    if (httpClientFactory != null)
+                                    {
+                                        var client = httpClientFactory.CreateClient();
+                                        await SendIngestionEventAsync(client, sendMessage, reservationId, stoppingToken);
+                                    }
+                                    else
+                                    {
+                                        using var client = new HttpClient();
+                                        await SendIngestionEventAsync(client, sendMessage, reservationId, stoppingToken);
+                                    }
+                                }
+                                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                                {
+                                    _logger.LogInformation("Ingestion call cancelled for guest message {Id}", guestMessage.Id);
+                                    throw;
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogError(ex, "Failed to call ingestion service after saving Airbnb guest message {Id}", guestMessage.Id);
+                                }
+                            }
+                            else
+                            {
+                                _logger.LogInformation("Skipping ingestion call; message not within reservation date range.");
+                            }
 
                             if (_channel != null)
                                 await _channel.BasicAckAsync(ea.DeliveryTag, false);
