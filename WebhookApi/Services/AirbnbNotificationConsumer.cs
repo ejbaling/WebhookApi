@@ -40,7 +40,7 @@ public class AirbnbNotificationConsumer : BackgroundService
         _scopeFactory = scopeFactory;
     }
 
-    public async Task SendIngestionEventAsync(HttpClient httpClient, string message, string? reservationId = null, CancellationToken cancellationToken = default)
+    private async Task SendIngestionEventAsync(HttpClient httpClient, string message, string? reservationId = null, CancellationToken cancellationToken = default)
     {
         var url = _configuration["Ingestion:Url"] ?? throw new InvalidOperationException("Ingestion URL not configured");
 
