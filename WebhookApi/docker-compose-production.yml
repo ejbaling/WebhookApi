@@ -16,7 +16,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       # - ASPNETCORE_URLS=http://+:80;https://+:443
       - ASPNETCORE_URLS=http://+:80
-      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__HostName=webhook-rabbitmq
       - AWS_PROFILE=config-manager
       - AWS_SHARED_CREDENTIALS_FILE=/root/.aws/credentials
       - Redis__ConnectionString=redis:6379,abortConnect=false
@@ -28,12 +28,12 @@ services:
       - webhook-network
       - opscore-net
     depends_on:
-      rabbitmq:
+      webhook-rabbitmq:
         condition: service_healthy
       redis:
         condition: service_healthy
 
-  rabbitmq:
+  webhook-rabbitmq:
     image: rabbitmq:3-management
     ports:
       - "5672:5672" # RabbitMQ default port
