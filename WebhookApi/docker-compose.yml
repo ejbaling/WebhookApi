@@ -39,6 +39,7 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
       - webhook-network
+      - opscore-net
     healthcheck:
       test:
         [
@@ -58,6 +59,7 @@ services:
       - redis_data:/data
     networks:
       - webhook-network
+      - opscore-net
     healthcheck:
       test: ["CMD-SHELL", "redis-cli ping || exit 1"]
       interval: 10s
