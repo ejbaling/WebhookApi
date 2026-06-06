@@ -26,6 +26,7 @@ services:
       - ~/.aws:/root/.aws:ro
     networks:
       - webhook-network
+      - opscore-network
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -74,6 +75,8 @@ services:
 networks:
   webhook-network:
     driver: bridge
+  opscore-network:
+    external: true
 
 volumes:
   rabbitmq_data:
