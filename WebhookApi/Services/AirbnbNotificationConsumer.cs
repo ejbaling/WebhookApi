@@ -248,11 +248,11 @@ public class AirbnbNotificationConsumer : BackgroundService
                             _logger.LogInformation("Airbnb message saved to database with ID {Id}", guestMessage.Id);
 
                             // Call ingestion service only when reservation title/date indicates message is in-range
-                            if (isInRange.HasValue && isInRange.Value)
+                            if (isInRange.HasValue && isInRange.Value && !string.IsNullOrWhiteSpace(incomingMessage))
                             {
                                 try
                                 {
-                                    var sendMessage = strBody;
+                                    var sendMessage = incomingMessage;
                                     var reservationId = guestMessage.BookingId ?? guestMessage.AirbnbId ?? string.Empty;
 
                                     var httpClientFactory = scope.ServiceProvider.GetService<IHttpClientFactory>();
