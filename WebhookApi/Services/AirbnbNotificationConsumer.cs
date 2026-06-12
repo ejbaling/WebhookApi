@@ -132,169 +132,170 @@ public class AirbnbNotificationConsumer : BackgroundService
                     var body = ea.Body.ToArray();
                     var strBody = Encoding.UTF8.GetString(body);
 
-                        // Try to parse a JSON envelope and extract a `title` field for date parsing
-                        string? incomingTitle = null;
-                        string? incomingMessage = null;
-                        try
+                    // Try to parse a JSON envelope and extract a `title` field for date parsing
+                    string? incomingTitle = null;
+                    string? incomingMessage = null;
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(strBody);
+                        var root = doc.RootElement;
+                        if (root.ValueKind == JsonValueKind.Object)
                         {
-                            using var doc = JsonDocument.Parse(strBody);
-                            var root = doc.RootElement;
-                            if (root.ValueKind == JsonValueKind.Object)
-                            {
-                                if (root.TryGetProperty("title", out var t)) incomingTitle = t.GetString();
-                                if (root.TryGetProperty("message", out var m)) incomingMessage = m.GetString();
-                                // Some producers may nest message inside a payload object
-                                if (incomingMessage == null && root.TryGetProperty("payload", out var p) && p.ValueKind == JsonValueKind.Object && p.TryGetProperty("message", out var pm))
-                                    incomingMessage = pm.GetString();
-                            }
+                            if (root.TryGetProperty("title", out var t)) incomingTitle = t.GetString();
+                            if (root.TryGetProperty("message", out var m)) incomingMessage = m.GetString();
+                            // Some producers may nest message inside a payload object
+                            if (incomingMessage == null && root.TryGetProperty("payload", out var p) && p.ValueKind == JsonValueKind.Object && p.TryGetProperty("message", out var pm))
+                                incomingMessage = pm.GetString();
                         }
-                        catch
+                    }
+                    catch
+                    {
+                        // not JSON or missing fields — fall back to raw body
+                    }
+
+                    try
+                    {
+                        // Ignore reaction messages (e.g. "Reacted ❤️ to \"...\"") so they
+                        // are not passed to the identifier extractor or considered for AMI.
+                        if (!string.IsNullOrWhiteSpace(strBody) && strBody.Contains("Reacted ❤️ to", StringComparison.OrdinalIgnoreCase))
                         {
-                            // not JSON or missing fields — fall back to raw body
-                        }
-
-                        try
-                        {
-                            // Ignore reaction messages (e.g. "Reacted ❤️ to \"...\"") so they
-                            // are not passed to the identifier extractor or considered for AMI.
-                            if (!string.IsNullOrWhiteSpace(strBody) && strBody.Contains("Reacted ❤️ to", StringComparison.OrdinalIgnoreCase))
-                            {
-                                _logger.LogInformation("Ignoring reaction message: {Message}", strBody);
-                                if (_channel != null)
-                                    await _channel.BasicAckAsync(ea.DeliveryTag, false);
-                                return;
-                            }
-                            if (!string.IsNullOrWhiteSpace(incomingMessage) && incomingMessage.Contains("Reacted ❤️ to", StringComparison.OrdinalIgnoreCase))
-                            {
-                                _logger.LogInformation("Ignoring reaction payload message: {Message}", incomingMessage);
-                                if (_channel != null)
-                                    await _channel.BasicAckAsync(ea.DeliveryTag, false);
-                                return;
-                            }
-
-                            _logger.LogInformation("Airbnb message: {Message}", strBody);
-
-                            using var scope = _scopeFactory.CreateScope();
-                            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-                            // Try to extract identifiers using registered extractor (if available)
-                            IdentifierResult? ids = null;
-                            try
-                            {
-                                var extractor = scope.ServiceProvider.GetService<IIdentifierExtractor>();
-                                if (extractor != null)
-                                    ids = await extractor.ExtractAsync(strBody, CancellationToken.None);
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogWarning(ex, "Identifier extractor failed for Airbnb message; continuing without AI extraction.");
-                            }
-
-                            var suggestion = ids?.Name ?? ids?.BookingId ?? ids?.AirbnbId ?? ids?.Email ?? ids?.Phone ?? ids?.Amount;
-
-                            // Use title field (if present) to determine whether this notification is within a reservation date range
-                            bool? isInRange = null;
-                            if (!string.IsNullOrWhiteSpace(incomingTitle))
-                            {
-                                isInRange = IsCurrentDateInReservationRange(incomingTitle);
-                                _logger.LogInformation("Airbnb title parsed for date range: {Title} => InRange={InRange}", incomingTitle, isInRange);
-                            }
-
-                            // If AI marked message as urgent and the reservation is in-range, trigger emergency AMI
-                            if (isInRange.HasValue && isInRange.Value && ids?.Urgent == true)
-                            {
-                                try
-                                {
-                                    using var amiScope = _scopeFactory.CreateScope();
-                                    var amiService = amiScope.ServiceProvider.GetService<IEmergencyAmiService>();
-                                    if (amiService != null)
-                                    {
-                                        await amiService.TriggerEmergencyAsync(CancellationToken.None);
-                                        _logger.LogWarning("Airbnb urgent message triggered emergency AMI.");
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    _logger.LogError(ex, "Airbnb failed to trigger emergency AMI call for message");
-                                }
-                            }
-
-                            var guestMessage = new GuestMessage
-                            {
-                                Message = incomingMessage ?? strBody,
-                                Language = "en",
-                                Category = (isInRange.HasValue && isInRange.Value) ? "reservation" : "airbnb",
-                                Sentiment = "neutral",
-                                ReplySuggestion = suggestion,
-                                Name = ids?.Name,
-                                Email = ids?.Email,
-                                Phone = ids?.Phone,
-                                BookingId = ids?.BookingId,
-                                AirbnbId = ids?.AirbnbId
-                            };
-
-                            dbContext.GuestMessages.Add(guestMessage);
-
-                            var guestResponse = new GuestResponse
-                            {
-                                GuestMessage = guestMessage,
-                                Response = string.Empty,
-                                CreatedAt = DateTime.UtcNow
-                            };
-                            dbContext.GuestResponses.Add(guestResponse);
-
-                            await dbContext.SaveChangesAsync(stoppingToken);
-
-                            _logger.LogInformation("Airbnb message saved to database with ID {Id}", guestMessage.Id);
-
-                            // Call ingestion service only when reservation title/date indicates message is in-range
-                            if (isInRange.HasValue && isInRange.Value && !string.IsNullOrWhiteSpace(incomingMessage))
-                            {
-                                try
-                                {
-                                    var sendMessage = incomingMessage;
-                                    var reservationId = guestMessage.BookingId ?? guestMessage.AirbnbId ?? string.Empty;
-
-                                    var httpClientFactory = scope.ServiceProvider.GetService<IHttpClientFactory>();
-                                    if (httpClientFactory != null)
-                                    {
-                                        var client = httpClientFactory.CreateClient();
-                                        await SendIngestionEventAsync(client, sendMessage, reservationId, stoppingToken);
-                                    }
-                                    else
-                                    {
-                                        using var client = new HttpClient();
-                                        await SendIngestionEventAsync(client, sendMessage, reservationId, stoppingToken);
-                                    }
-                                }
-                                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                                {
-                                    _logger.LogInformation("Ingestion call cancelled for guest message {Id}", guestMessage.Id);
-                                    throw;
-                                }
-                                catch (Exception ex)
-                                {
-                                    _logger.LogError(ex, "Failed to call ingestion service after saving Airbnb guest message {Id}", guestMessage.Id);
-                                }
-                            }
-                            else
-                            {
-                                _logger.LogInformation("Skipping ingestion call; message not within reservation date range.");
-                            }
-
+                            _logger.LogInformation("Ignoring reaction message: {Message}", strBody);
                             if (_channel != null)
                                 await _channel.BasicAckAsync(ea.DeliveryTag, false);
+                            return;
+                        }
+                        if (!string.IsNullOrWhiteSpace(incomingMessage) && incomingMessage.Contains("Reacted ❤️ to", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _logger.LogInformation("Ignoring reaction payload message: {Message}", incomingMessage);
+                            if (_channel != null)
+                                await _channel.BasicAckAsync(ea.DeliveryTag, false);
+                            return;
+                        }
+
+                        _logger.LogInformation("Airbnb message: {Message}", strBody);
+
+                        using var scope = _scopeFactory.CreateScope();
+                        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+                        // Try to extract identifiers using registered extractor (if available)
+                        IdentifierResult? ids = null;
+                        try
+                        {
+                            var extractor = scope.ServiceProvider.GetService<IIdentifierExtractor>();
+                            if (extractor != null)
+                                ids = await extractor.ExtractAsync(strBody, CancellationToken.None);
                         }
                         catch (Exception ex)
                         {
+                            _logger.LogWarning(ex, "Identifier extractor failed for Airbnb message; continuing without AI extraction.");
+                        }
+
+                        var suggestion = ids?.Name ?? ids?.BookingId ?? ids?.AirbnbId ?? ids?.Email ?? ids?.Phone ?? ids?.Amount;
+
+                        // Use title field (if present) to determine whether this notification is within a reservation date range
+                        bool? isInRange = null;
+                        if (!string.IsNullOrWhiteSpace(incomingTitle))
+                        {
+                            isInRange = IsCurrentDateInReservationRange(incomingTitle);
+                            _logger.LogInformation("Airbnb title parsed for date range: {Title} => InRange={InRange}", incomingTitle, isInRange);
+                        }
+
+                        // If AI marked message as urgent and the reservation is in-range, trigger emergency AMI
+                        if (isInRange.HasValue && isInRange.Value && ids?.Urgent == true)
+                        {
                             try
                             {
-                                if (_channel != null)
-                                    await _channel.BasicNackAsync(ea.DeliveryTag, false, true);
+                                using var amiScope = _scopeFactory.CreateScope();
+                                var amiService = amiScope.ServiceProvider.GetService<IEmergencyAmiService>();
+                                if (amiService != null)
+                                {
+                                    await amiService.TriggerEmergencyAsync(CancellationToken.None);
+                                    _logger.LogWarning("Airbnb urgent message triggered emergency AMI.");
+                                }
                             }
-                            catch { }
-                            _logger.LogError(ex, "Error processing Airbnb message: {Message}", strBody);
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Airbnb failed to trigger emergency AMI call for message");
+                            }
                         }
+
+                        var guestMessage = new GuestMessage
+                        {
+                            Message = incomingMessage ?? strBody,
+                            Language = "en",
+                            Category = (isInRange.HasValue && isInRange.Value) ? "reservation" : "airbnb",
+                            Sentiment = "neutral",
+                            ReplySuggestion = suggestion,
+                            Name = ids?.Name,
+                            Email = ids?.Email,
+                            Phone = ids?.Phone,
+                            BookingId = ids?.BookingId,
+                            AirbnbId = ids?.AirbnbId
+                        };
+
+                        dbContext.GuestMessages.Add(guestMessage);
+
+                        var guestResponse = new GuestResponse
+                        {
+                            GuestMessage = guestMessage,
+                            Response = string.Empty,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        dbContext.GuestResponses.Add(guestResponse);
+
+                        await dbContext.SaveChangesAsync(stoppingToken);
+
+                        _logger.LogInformation("Airbnb message saved to database with ID {Id}", guestMessage.Id);
+
+                        // Call ingestion service only when reservation title/date indicates message is in-range
+                        // if (isInRange.HasValue && isInRange.Value && !string.IsNullOrWhiteSpace(incomingMessage))
+                        if (!string.IsNullOrWhiteSpace(incomingMessage))
+                        {
+                            try
+                            {
+                                var sendMessage = incomingMessage;
+                                var reservationId = guestMessage.BookingId ?? guestMessage.AirbnbId ?? string.Empty;
+
+                                var httpClientFactory = scope.ServiceProvider.GetService<IHttpClientFactory>();
+                                if (httpClientFactory != null)
+                                {
+                                    var client = httpClientFactory.CreateClient();
+                                    await SendIngestionEventAsync(client, sendMessage, reservationId, stoppingToken);
+                                }
+                                else
+                                {
+                                    using var client = new HttpClient();
+                                    await SendIngestionEventAsync(client, sendMessage, reservationId, stoppingToken);
+                                }
+                            }
+                            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                            {
+                                _logger.LogInformation("Ingestion call cancelled for guest message {Id}", guestMessage.Id);
+                                throw;
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Failed to call ingestion service after saving Airbnb guest message {Id}", guestMessage.Id);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogInformation("Skipping ingestion call; message not within reservation date range.");
+                        }
+
+                        if (_channel != null)
+                            await _channel.BasicAckAsync(ea.DeliveryTag, false);
+                    }
+                    catch (Exception ex)
+                    {
+                        try
+                        {
+                            if (_channel != null)
+                                await _channel.BasicNackAsync(ea.DeliveryTag, false, true);
+                        }
+                        catch { }
+                        _logger.LogError(ex, "Error processing Airbnb message: {Message}", strBody);
+                    }
                 };
 
                 await _channel.BasicConsumeAsync(queue: QueueName, autoAck: false, consumer: consumer);
