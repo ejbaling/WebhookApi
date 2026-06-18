@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Net.Http;
 using System.Text.Json;
@@ -40,18 +41,45 @@ public class AirbnbNotificationConsumer : BackgroundService
         _scopeFactory = scopeFactory;
     }
 
-    private async Task SendIngestionEventAsync(HttpClient httpClient, string message, string? reservationId = null, CancellationToken cancellationToken = default)
+    private sealed record AirbnbIngestionRequest(
+        string Message,
+        string? Title,
+        string? ReservationId,
+        long? TimestampMs,
+        string? GuestName);
+
+    private async Task SendIngestionEventAsync(
+        HttpClient httpClient,
+        AirbnbIngestionRequest request,
+        CancellationToken cancellationToken = default)
     {
         var url = _configuration["Ingestion:Url"] ?? throw new InvalidOperationException("Ingestion URL not configured");
+        var contextIdValue = _configuration["Ingestion:ContextId"]
+            ?? throw new InvalidOperationException("Ingestion:ContextId configuration is required");
+        if (!Guid.TryParse(contextIdValue, out var contextId))
+        {
+            throw new InvalidOperationException($"Ingestion:ContextId is not a valid GUID: {contextIdValue}");
+        }
+
+        var sourcePlatform = _configuration["Ingestion:SourcePlatform"] ?? "Airbnb";
+        var eventOccurredUtc = ResolveEventOccurredUtc(request.TimestampMs);
+        var externalEventId = ResolveExternalEventId(request.TimestampMs, request.Message, request.Title);
 
         var payload = new
         {
-            contextId = "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            sourcePlatform = "string",
-            externalEventId = "string",
+            contextId,
+            sourcePlatform,
+            externalEventId,
             eventType = "GuestMessage",
-            payload = new { message, reservationId },
-            eventOccurredUtc = "2026-06-05T03:17:43.485Z"
+            payload = new
+            {
+                message = request.Message,
+                title = request.Title,
+                reservationId = request.ReservationId,
+                guestName = request.GuestName,
+                timestamp = request.TimestampMs
+            },
+            eventOccurredUtc
         };
 
         var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
@@ -60,12 +88,40 @@ public class AirbnbNotificationConsumer : BackgroundService
         using var resp = await httpClient.PostAsync(url, content, cancellationToken);
         if (!resp.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Ingestion POST to {Url} returned {StatusCode}: {Reason}", url, resp.StatusCode, resp.ReasonPhrase);
+            var responseBody = await resp.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning(
+                "Ingestion POST to {Url} returned {StatusCode}: {Reason}. Body={Body}",
+                url, resp.StatusCode, resp.ReasonPhrase, responseBody);
         }
         else
         {
-            _logger.LogInformation("Ingestion event posted successfully to {Url}", url);
+            var responseBody = await resp.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogInformation(
+                "Ingestion event posted successfully to {Url}. ExternalEventId={ExternalEventId} Response={Response}",
+                url, externalEventId, responseBody);
         }
+    }
+
+    private static DateTime ResolveEventOccurredUtc(long? timestampMs)
+    {
+        if (timestampMs is > 0)
+        {
+            return DateTimeOffset.FromUnixTimeMilliseconds(timestampMs.Value).UtcDateTime;
+        }
+
+        return DateTime.UtcNow;
+    }
+
+    private static string ResolveExternalEventId(long? timestampMs, string message, string? title)
+    {
+        if (timestampMs is > 0)
+        {
+            return $"airbnb-{timestampMs.Value}";
+        }
+
+        var key = $"{title ?? string.Empty}|{message}";
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key))).ToLowerInvariant();
+        return $"airbnb-{hash[..32]}";
     }
 
     private async Task<bool> TryConnect()
@@ -132,9 +188,10 @@ public class AirbnbNotificationConsumer : BackgroundService
                     var body = ea.Body.ToArray();
                     var strBody = Encoding.UTF8.GetString(body);
 
-                    // Try to parse a JSON envelope and extract a `title` field for date parsing
+                    // Try to parse a JSON envelope and extract fields for processing and OpsCore ingestion
                     string? incomingTitle = null;
                     string? incomingMessage = null;
+                    long? incomingTimestampMs = null;
                     try
                     {
                         using var doc = JsonDocument.Parse(strBody);
@@ -143,6 +200,17 @@ public class AirbnbNotificationConsumer : BackgroundService
                         {
                             if (root.TryGetProperty("title", out var t)) incomingTitle = t.GetString();
                             if (root.TryGetProperty("message", out var m)) incomingMessage = m.GetString();
+                            if (root.TryGetProperty("timestamp", out var ts))
+                            {
+                                if (ts.ValueKind == JsonValueKind.Number && ts.TryGetInt64(out var tsValue))
+                                {
+                                    incomingTimestampMs = tsValue;
+                                }
+                                else if (ts.ValueKind == JsonValueKind.String && long.TryParse(ts.GetString(), out var parsedTs))
+                                {
+                                    incomingTimestampMs = parsedTs;
+                                }
+                            }
                             // Some producers may nest message inside a payload object
                             if (incomingMessage == null && root.TryGetProperty("payload", out var p) && p.ValueKind == JsonValueKind.Object && p.TryGetProperty("message", out var pm))
                                 incomingMessage = pm.GetString();
@@ -253,19 +321,25 @@ public class AirbnbNotificationConsumer : BackgroundService
                         {
                             try
                             {
-                                var sendMessage = incomingMessage;
-                                var reservationId = guestMessage.BookingId ?? guestMessage.AirbnbId ?? string.Empty;
+                                var ingestionRequest = new AirbnbIngestionRequest(
+                                    Message: incomingMessage,
+                                    Title: incomingTitle,
+                                    ReservationId: string.IsNullOrWhiteSpace(guestMessage.BookingId)
+                                        ? guestMessage.AirbnbId
+                                        : guestMessage.BookingId,
+                                    TimestampMs: incomingTimestampMs,
+                                    GuestName: guestMessage.Name);
 
                                 var httpClientFactory = scope.ServiceProvider.GetService<IHttpClientFactory>();
                                 if (httpClientFactory != null)
                                 {
                                     var client = httpClientFactory.CreateClient();
-                                    await SendIngestionEventAsync(client, sendMessage, reservationId, stoppingToken);
+                                    await SendIngestionEventAsync(client, ingestionRequest, stoppingToken);
                                 }
                                 else
                                 {
                                     using var client = new HttpClient();
-                                    await SendIngestionEventAsync(client, sendMessage, reservationId, stoppingToken);
+                                    await SendIngestionEventAsync(client, ingestionRequest, stoppingToken);
                                 }
                             }
                             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
