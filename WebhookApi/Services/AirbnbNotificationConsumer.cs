@@ -333,7 +333,7 @@ public class AirbnbNotificationConsumer : BackgroundService
                                 var httpClientFactory = scope.ServiceProvider.GetService<IHttpClientFactory>();
                                 if (httpClientFactory != null)
                                 {
-                                    var client = httpClientFactory.CreateClient();
+                                    var client = httpClientFactory.CreateClient("ingestion");
                                     await SendIngestionEventAsync(client, ingestionRequest, stoppingToken);
                                 }
                                 else

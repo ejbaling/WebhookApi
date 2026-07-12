@@ -100,6 +100,16 @@ builder.Services.AddHttpClient();
 var aiTimeoutSeconds = builder.Configuration.GetValue<int?>("AI:TimeoutSeconds") ?? 600; // default 10 minutes
 builder.Services.AddHttpClient("ai").ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(aiTimeoutSeconds));
 
+// Named HttpClient for Ingestion service; reads default headers from configuration
+builder.Services.AddHttpClient("ingestion", client =>
+{
+    var headersSection = builder.Configuration.GetSection("Ingestion:Headers");
+    foreach (var h in headersSection.GetChildren())
+    {
+        client.DefaultRequestHeaders.TryAddWithoutValidation(h.Key, h.Value);
+    }
+});
+
 // Emergency AMI service for originating calls to PBX
 builder.Services.AddSingleton<WebhookApi.Services.IEmergencyAmiService, WebhookApi.Services.EmergencyAmiService>();
 
