@@ -99,8 +99,16 @@ if (!string.IsNullOrWhiteSpace(ssmPath))
     });
 }
 
+// Validate Postgres connection string is provided (from SSM or env) before registering DbContext
+var pgConn = builder.Configuration.GetConnectionString("Postgres");
+if (string.IsNullOrWhiteSpace(pgConn) || pgConn.IndexOf("REPLACE_WITH_SSM", System.StringComparison.OrdinalIgnoreCase) >= 0)
+{
+    Log.Error("Postgres connection string is missing or contains a placeholder. Ensure Parameter Store or an environment variable provides 'ConnectionStrings:Postgres'.");
+    throw new InvalidOperationException("Postgres connection string missing");
+}
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres"),
+    options.UseNpgsql(pgConn,
         o => o.UseVector()));
 
 builder.Services.AddScoped<IRuleRepository, RuleRepository>();
