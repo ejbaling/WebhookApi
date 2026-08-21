@@ -1,0 +1,6 @@
+{
+  "/webhook-api/prod/ConnectionStrings/Postgres": "Host=10.0.0.101;Port=5432;Database=redwoodiloilo;Username=admin;Password=REPLACE_WITH_PROD_PASSWORD",
+  "/webhook-api/prod/Telegram/AdminBotToken": "REPLACE_WITH_ADMIN_BOT_TOKEN",
+  "/webhook-api/prod/AI/ApiKey": "REPLACE_WITH_AI_API_KEY",
+  "/webhook-api/prod/Redis/ConnectionString": "redis:6379,abortConnect=false"
+}

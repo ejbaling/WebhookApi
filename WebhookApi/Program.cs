@@ -5,6 +5,7 @@ using RabbitMQ.Client;
 using Telegram.Bot;
 using WebhookApi.Services;
 using WebhookApi.Data;
+using Amazon.Extensions.Configuration.SystemsManager;
 using Microsoft.EntityFrameworkCore;
 using RedwoodIloilo.Common.Entities;
 using System.Net.Http.Headers;
@@ -83,6 +84,20 @@ builder.Services.AddHostedService<WebhookApi.Services.AiTelegramService>();
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+
+// If AWS Systems Manager Parameter Store path is configured, load parameters from SSM.
+// This allows storing secrets (connection strings, API keys) in Parameter Store
+// and have them override values from appsettings files.
+var ssmPath = builder.Configuration["AWS:SystemsManager:Path"];
+if (!string.IsNullOrWhiteSpace(ssmPath))
+{
+    builder.Configuration.AddSystemsManager(source =>
+    {
+        source.Path = ssmPath;
+        source.Optional = true;
+        // source.ReloadAfter = TimeSpan.FromMinutes(5);
+    });
+}
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres"),
