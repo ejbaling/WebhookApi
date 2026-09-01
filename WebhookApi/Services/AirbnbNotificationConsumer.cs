@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Text.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using Telegram.Bot;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
@@ -314,6 +315,26 @@ public class AirbnbNotificationConsumer : BackgroundService
                         await dbContext.SaveChangesAsync(stoppingToken);
 
                         _logger.LogInformation("Airbnb message saved to database with ID {Id}", guestMessage.Id);
+
+                        // Forward to Telegram when reservation title/date indicates message is in-range
+                        var botToken = _configuration["Telegram:BotToken"];
+                        var chatId = _configuration["Telegram:ChatId"]; // personal chat id or channel
+                        if (!string.IsNullOrWhiteSpace(botToken) && !string.IsNullOrWhiteSpace(chatId) && isInRange.HasValue && isInRange.Value)
+                        {
+                            try
+                            {
+                                var botClient = new TelegramBotClient(botToken);
+                                var subject = RoomNameMapper.MapSubject(incomingTitle);
+
+                                var telegramMessage = $"{subject}: {guestMessage.Message}";
+                                await botClient.SendTextMessageAsync(new Telegram.Bot.Types.ChatId(chatId), text: telegramMessage, cancellationToken: CancellationToken.None);
+                                _logger.LogInformation("Airbnb forwarded message to Telegram: {Message}", telegramMessage);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Failed to forward Airbnb message to Telegram for GuestMessage {Id}", guestMessage.Id);
+                            }
+                        }
 
                         // Call ingestion service only when reservation title/date indicates message is in-range
                         // if (isInRange.HasValue && isInRange.Value && !string.IsNullOrWhiteSpace(incomingMessage))

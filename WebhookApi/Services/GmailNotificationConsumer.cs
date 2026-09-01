@@ -535,24 +535,8 @@ public partial class GmailNotificationConsumer : BackgroundService
         // Step 5: Collapse multiple spaces
         cleanMessage = Regex.Replace(cleanMessage, @"\s{2,}", " ");
 
-        // Step 6: Replace the whole string with room number based on room name.
-        var mappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            { "Rangiora", "Room 1" },
-            { "Rimu", "Room 2" },
-            { "Kauri", "Room 3" },
-            { "Kowhai", "Room 4" }
-        };
-
-        string result = cleanMessage;
-        foreach (var kvp in mappings)
-        {
-            if (cleanMessage.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
-            {
-                result = kvp.Value;
-                break; // stop at first match
-            }
-        }
+        // Step 6: Replace the whole string with room number based on room name using shared mapper
+        string result = RoomNameMapper.MapSubject(cleanMessage);
 
         // Step 7: Truncate to maxLength
         return result.Length <= maxLength
