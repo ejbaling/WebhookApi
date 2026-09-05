@@ -421,26 +421,26 @@ public partial class GmailNotificationConsumer : BackgroundService
                                     }
 
                                     // Forward to Telegram
-                                    var botToken = _configuration["Telegram:BotToken"];
-                                    var chatId = _configuration["Telegram:ChatId"]; // Your personal Telegram user ID
-                                    if (string.IsNullOrWhiteSpace(botToken) || string.IsNullOrWhiteSpace(chatId))
-                                    {
-                                        _logger.LogError("Gmail Telegram BotToken or chatId is not configured.");
-                                        return;
-                                    }
+                                    // var botToken = _configuration["Telegram:BotToken"];
+                                    // var chatId = _configuration["Telegram:ChatId"]; // Your personal Telegram user ID
+                                    // if (string.IsNullOrWhiteSpace(botToken) || string.IsNullOrWhiteSpace(chatId))
+                                    // {
+                                    //     _logger.LogError("Gmail Telegram BotToken or chatId is not configured.");
+                                    //     return;
+                                    // }
                                     
-                                    var botClient = new TelegramBotClient(botToken);
+                                    // var botClient = new TelegramBotClient(botToken);
 
-                                    if (isInRange.HasValue && isInRange.Value)
-                                    {
-                                        var telegramMessage = $"{ExtractSubject(subject)}: {bookedGuestEmailBody}";
-                                        // Replace with your actual chatId and botClient instance
-                                        await botClient.SendTextMessageAsync(
-                                            new Telegram.Bot.Types.ChatId(chatId),
-                                            text: telegramMessage,
-                                            cancellationToken: CancellationToken.None);
-                                        _logger.LogInformation("Gmail forwarded message to Telegram: {Message}", telegramMessage);
-                                    }
+                                    // if (isInRange.HasValue && isInRange.Value)
+                                    // {
+                                    //     var telegramMessage = $"{ExtractSubject(subject)}: {bookedGuestEmailBody}";
+                                    //     // Replace with your actual chatId and botClient instance
+                                    //     await botClient.SendTextMessageAsync(
+                                    //         new Telegram.Bot.Types.ChatId(chatId),
+                                    //         text: telegramMessage,
+                                    //         cancellationToken: CancellationToken.None);
+                                    //     _logger.LogInformation("Gmail forwarded message to Telegram: {Message}", telegramMessage);
+                                    // }
 
                                     // AI response to Telegram is sent in ai-service python script  
                                     // if (aiConfig?.Value == true)
