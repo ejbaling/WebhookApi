@@ -336,47 +336,49 @@ public class AirbnbNotificationConsumer : BackgroundService
                             }
                         }
 
+                        // Commented out ingestion call to avoid duplicate processing; the device that calls this already does ingestion.
+                        // Delete the following block if everything is working fine and we are sure that ingestion is being called from the device. 
                         // Call ingestion service only when reservation title/date indicates message is in-range
                         // if (isInRange.HasValue && isInRange.Value && !string.IsNullOrWhiteSpace(incomingMessage))
-                        if (!string.IsNullOrWhiteSpace(incomingMessage))
-                        {
-                            try
-                            {
-                                var ingestionRequest = new AirbnbIngestionRequest(
-                                    Message: incomingMessage,
-                                    Title: incomingTitle,
-                                    ReservationId: string.IsNullOrWhiteSpace(guestMessage.BookingId)
-                                        ? guestMessage.AirbnbId
-                                        : guestMessage.BookingId,
-                                    TimestampMs: incomingTimestampMs,
-                                    GuestName: guestMessage.Name);
+                        // if (!string.IsNullOrWhiteSpace(incomingMessage))
+                        // {
+                        //     try
+                        //     {
+                        //         var ingestionRequest = new AirbnbIngestionRequest(
+                        //             Message: incomingMessage,
+                        //             Title: incomingTitle,
+                        //             ReservationId: string.IsNullOrWhiteSpace(guestMessage.BookingId)
+                        //                 ? guestMessage.AirbnbId
+                        //                 : guestMessage.BookingId,
+                        //             TimestampMs: incomingTimestampMs,
+                        //             GuestName: guestMessage.Name);
 
-                                var httpClientFactory = scope.ServiceProvider.GetService<IHttpClientFactory>();
-                                if (httpClientFactory != null)
-                                {
-                                    var client = httpClientFactory.CreateClient("ingestion");
-                                    await SendIngestionEventAsync(client, ingestionRequest, stoppingToken);
-                                }
-                                else
-                                {
-                                    using var client = new HttpClient();
-                                    await SendIngestionEventAsync(client, ingestionRequest, stoppingToken);
-                                }
-                            }
-                            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                            {
-                                _logger.LogInformation("Ingestion call cancelled for guest message {Id}", guestMessage.Id);
-                                throw;
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError(ex, "Failed to call ingestion service after saving Airbnb guest message {Id}", guestMessage.Id);
-                            }
-                        }
-                        else
-                        {
-                            _logger.LogInformation("Skipping ingestion call; message not within reservation date range.");
-                        }
+                        //         var httpClientFactory = scope.ServiceProvider.GetService<IHttpClientFactory>();
+                        //         if (httpClientFactory != null)
+                        //         {
+                        //             var client = httpClientFactory.CreateClient("ingestion");
+                        //             await SendIngestionEventAsync(client, ingestionRequest, stoppingToken);
+                        //         }
+                        //         else
+                        //         {
+                        //             using var client = new HttpClient();
+                        //             await SendIngestionEventAsync(client, ingestionRequest, stoppingToken);
+                        //         }
+                        //     }
+                        //     catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                        //     {
+                        //         _logger.LogInformation("Ingestion call cancelled for guest message {Id}", guestMessage.Id);
+                        //         throw;
+                        //     }
+                        //     catch (Exception ex)
+                        //     {
+                        //         _logger.LogError(ex, "Failed to call ingestion service after saving Airbnb guest message {Id}", guestMessage.Id);
+                        //     }
+                        // }
+                        // else
+                        // {
+                        //     _logger.LogInformation("Skipping ingestion call; message not within reservation date range.");
+                        // }
 
                         if (_channel != null)
                             await _channel.BasicAckAsync(ea.DeliveryTag, false);
